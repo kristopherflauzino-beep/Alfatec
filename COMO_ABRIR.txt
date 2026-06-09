@@ -1,0 +1,53 @@
+COMO ABRIR O APP
+
+1. VERSAO WINDOWS (.EXE)
+- Abra este arquivo:
+  dist\ChamadaDoProfessor.exe
+
+- Se preferir, tambem pode dar duplo clique em:
+  Abrir_App_Desktop.bat
+
+2. VERSAO ANDROID
+- IMPORTANTE:
+  O Expo Go e apenas para teste.
+  Se voce fechar o servidor no computador, o app pode parar de abrir no celular.
+
+- Instale o app Expo Go no celular Android.
+- No computador, de duplo clique em:
+  Abrir_App_Android.bat
+- O computador e o celular precisam estar na mesma rede Wi-Fi.
+- Quando o QR Code aparecer, escaneie com o Expo Go.
+- Se o QR Code nao funcionar, no Expo Go use a opcao para abrir uma URL manual.
+- No ultimo teste local, o app respondeu em:
+  http://192.168.37.5:8081
+
+- No Expo Go, o formato manual costuma ficar assim:
+  exp://IP_DO_COMPUTADOR:PORTA
+
+3. VERSAO ANDROID QUE ABRE SEMPRE
+- Para gerar um APK instalavel de verdade, use:
+  Gerar_APK_Android.bat
+
+- Esse processo cria uma build Android propria do app, sem depender do Expo Go.
+- Na primeira vez, o EAS pode pedir login na conta Expo.
+- Depois que o APK for gerado e instalado no smartphone, ele abre como app normal.
+
+4. ONDE OS DADOS FICAM SALVOS NO WINDOWS
+- Os dados ficam salvos localmente em:
+  dados_chamada\chamada_data.json
+
+- Os relatorios diarios ficam em:
+  dados_chamada\relatorios
+
+5. FUNCOES DISPONIVEIS
+- Renomear turma
+- Adicionar aluno
+- Editar aluno
+- Apagar aluno definitivamente
+- Lancar presenca e falta
+- Registrar notas 1, 2, 3 e 4
+- Salvar observacoes
+- Ver relatorio completo
+- Gerar relatorio diario geral
+- Gerar relatorio diario da turma ativa
+- Resetar tudo definitivamente

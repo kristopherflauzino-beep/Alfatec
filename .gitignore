@@ -1,0 +1,51 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-export*/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# local env files
+.env*.local
+
+# generated native folders
+/ios
+
+# temporary scaffolds
+/expo_seed
+
+# local build helpers
+/.local-build/
+/.npm-cache-temp/
+/build/
+/__pycache__/
+
+# local app data
+/dados_chamada/
+/dados_chamada_v2/
+/v2/backend/uploads/*
+!/v2/backend/uploads/.gitkeep
+
+# V2 runtime data
+/v2/backend/data/store.json
+/dados_chamada/license_v2_session.json

@@ -1,0 +1,9 @@
+Iniciando o app Android em modo LAN na porta 8081...
+O computador e o smartphone precisam estar na mesma rede Wi-Fi.
+Abra o Expo Go no celular e escaneie o QR Code quando ele aparecer.
+Se o Expo Go nao estiver instalado, instale primeiro no smartphone.
+Starting project at C:\Users\Kristopher Cunha\Desktop\Chamada
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+Logs for your project will appear below.

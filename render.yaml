@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: controle-alfatec-v2
+    runtime: node
+    rootDir: .
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run v2:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: V2_DATA_DIR
+        value: /var/data/chamada-v2
+    disk:
+      name: chamada-v2-data
+      mountPath: /var/data
+      sizeGB: 5
