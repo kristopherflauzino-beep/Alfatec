@@ -39,6 +39,9 @@ yarn-error.*
 /.npm-cache-temp/
 /build/
 /__pycache__/
+/android/gradle_local_cache/
+/tools/jdk17/
+/tools/jdk17.zip
 
 # local app data
 /dados_chamada/

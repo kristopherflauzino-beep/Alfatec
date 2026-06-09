@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/:path*",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://controle-alfatec-v2.onrender.com/api/:path*"
+    }
+  ]
+}

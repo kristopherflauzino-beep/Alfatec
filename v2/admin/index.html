@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Controle AlfaTec</title>
+    <link rel="icon" type="image/png" href="alfatec-logo.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-glow" aria-hidden="true"></div>
+
+    <main class="shell">
+      <section class="masthead">
+        <div class="hero-copy">
+          <div class="hero-brand-lockup">
+            <div class="hero-text">
+              <p class="eyebrow">Controle AlfaTec</p>
+              <h1>Clientes, usuarios e dispositivos sob o mesmo controle</h1>
+              <p class="lede">
+                O Controle AlfaTec centraliza assinaturas, usuarios por professor, limite de dispositivos, logins e
+                quantidade de alunos cadastrados por aparelho.
+              </p>
+            </div>
+
+            <div class="logo-frame">
+              <img class="hero-logo" src="alfatec-logo.png" alt="Logo AlfaTec" />
+            </div>
+          </div>
+        </div>
+
+        <div class="status-stack">
+          <article class="status-panel">
+            <div class="status-row">
+              <span>Servidor</span>
+              <strong id="server-name">Controle AlfaTec</strong>
+            </div>
+            <div class="status-row">
+              <span>Saude</span>
+              <strong id="health-status">Verificando...</strong>
+            </div>
+            <div class="status-row">
+              <span>Sessao</span>
+              <strong id="session-status">Aguardando login</strong>
+            </div>
+            <div class="status-actions">
+              <button class="ghost" id="header-refresh-button" type="button">Atualizar</button>
+              <button class="ghost hidden" id="logout-button" type="button">Sair</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="entry-grid" id="entry-panel">
+        <article class="panel login-panel" id="login-card">
+          <div class="panel-head login-head">
+            <div>
+              <p class="section-kicker">Acesso</p>
+              <h2>Entre com admin ou cliente gerente</h2>
+              <p class="login-copy">
+                O admin ve todos os clientes. O cliente gerente ve apenas a propria base e cria os usuarios dos
+                professores dentro do limite de dispositivos contratado.
+              </p>
+            </div>
+          </div>
+
+          <div class="login-layout">
+            <div class="login-brand">
+              <img class="login-brand-logo" src="alfatec-logo.png" alt="Logo AlfaTec" />
+              <div class="login-brand-copy">
+                <strong>AlfaTec</strong>
+                <span>Tecnologia que conecta o futuro</span>
+              </div>
+            </div>
+
+            <form id="login-form" class="stack login-form">
+              <label>
+                <span>Email</span>
+                <input id="login-email" type="email" value="" placeholder="seu-email@alfatec.com" autocomplete="username" />
+              </label>
+              <label>
+                <span>Senha</span>
+                <input id="login-password" type="password" value="" placeholder="Digite sua senha" autocomplete="current-password" />
+              </label>
+              <button type="submit">Entrar no Controle AlfaTec</button>
+            </form>
+          </div>
+
+          <p class="helper-copy">
+            Depois do login, voce gerencia clientes, usuarios dos professores, senhas, logins, alunos por aparelho e
+            liberacao de dispositivos na mesma tela.
+          </p>
+        </article>
+
+        <article class="panel guide-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Nova estrutura</p>
+              <h2>Como o fluxo foi organizado</h2>
+            </div>
+          </div>
+
+          <div class="guide-list">
+            <article class="guide-item">
+              <strong>1. Cliente gerente</strong>
+              <p>O cliente principal pode entrar no painel e criar usuarios para cada professor.</p>
+            </article>
+            <article class="guide-item">
+              <strong>2. Limite por dispositivos</strong>
+              <p>A quantidade de usuarios de professor fica limitada ao numero de dispositivos contratado.</p>
+            </article>
+            <article class="guide-item">
+              <strong>3. Telemetria do app</strong>
+              <p>O painel recebe total de alunos, turmas e quantidade de logins por usuario.</p>
+            </article>
+            <article class="guide-item">
+              <strong>4. Dispositivo unico</strong>
+              <p>Cada usuario pode ser vinculado a um unico aparelho, preservando o banco local de cada professor.</p>
+            </article>
+          </div>
+        </article>
+
+        <article class="status-panel access-panel entry-access-panel">
+          <div class="access-head">
+            <p class="section-kicker">Operacao</p>
+            <h2>Pronto para web, desktop e outros aparelhos</h2>
+          </div>
+          <div class="access-points">
+            <article class="access-item">
+              <strong>1. Painel web</strong>
+              <p>Hospede o Controle AlfaTec no Vercel para o admin acessar de qualquer computador pelo navegador.</p>
+            </article>
+            <article class="access-item">
+              <strong>2. Servidor publico</strong>
+              <p>As rotas da assinatura continuam apontando para o backend publico configurado no deploy.</p>
+            </article>
+            <article class="access-item">
+              <strong>3. Professores</strong>
+              <p>Crie um usuario por professor e acompanhe senha, logins, alunos e dispositivo vinculado.</p>
+            </article>
+          </div>
+          <p class="status-note">O painel agora foi preparado para administracao central via navegador e uso distribuido em varias maquinas.</p>
+        </article>
+      </section>
+
+      <section class="portal hidden" id="portal">
+        <div class="portal-shell">
+          <aside class="left-rail">
+            <article class="panel base-panel control-bar">
+              <div class="search-header">
+                <div>
+                  <p class="section-kicker">Base conectada</p>
+                  <h2>Clientes</h2>
+                </div>
+                <span class="counter-pill" id="results-count">0 resultados</span>
+              </div>
+
+              <div class="control-tools">
+                <label class="search-field">
+                  <span>Buscar cliente</span>
+                  <input id="customer-search" type="text" placeholder="Digite nome, email ou plano" />
+                </label>
+
+                <label class="filter-field">
+                  <span>Status</span>
+                  <select id="status-filter">
+                    <option value="all">Todos</option>
+                    <option value="active">Ativos</option>
+                    <option value="blocked">Bloqueados</option>
+                    <option value="expired">Expirados</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="control-meta">
+                <span>Arquivo de dados</span>
+                <strong id="data-file">-</strong>
+              </div>
+
+              <div class="panel-divider" aria-hidden="true"></div>
+
+              <div class="list-head">
+                <div>
+                  <p class="section-kicker">Carteira</p>
+                  <h2>Lista de clientes</h2>
+                </div>
+                <p class="helper-copy">Selecione um cliente para editar contrato, ver usuarios e acompanhar os aparelhos.</p>
+              </div>
+
+              <div id="customers-list" class="customer-list"></div>
+            </article>
+          </aside>
+
+          <section class="operations-pane">
+            <section class="metrics-grid">
+              <article class="metric-panel">
+                <span>Total de clientes</span>
+                <strong id="metric-total">0</strong>
+              </article>
+              <article class="metric-panel">
+                <span>Ativos</span>
+                <strong id="metric-active">0</strong>
+              </article>
+              <article class="metric-panel">
+                <span>Bloqueados</span>
+                <strong id="metric-blocked">0</strong>
+              </article>
+              <article class="metric-panel">
+                <span>Dispositivos contratados</span>
+                <strong id="metric-devices">0</strong>
+              </article>
+              <article class="metric-panel">
+                <span>Valor atual</span>
+                <strong id="metric-revenue">R$ 0,00</strong>
+              </article>
+              <article class="metric-panel">
+                <span>Alunos sincronizados</span>
+                <strong id="metric-due-soon">0</strong>
+              </article>
+            </section>
+
+            <article class="panel detail-panel">
+              <div class="panel-head detail-head">
+                <div>
+                  <p class="section-kicker">Cliente ativo</p>
+                  <h2 id="detail-title">Selecione um cliente</h2>
+                </div>
+                <button class="ghost hidden" id="copy-selected-email-button" type="button">Copiar email</button>
+              </div>
+
+              <div id="detail-empty" class="empty-state">
+                <strong>Nada selecionado ainda.</strong>
+                <p>Escolha um cliente para editar cadastro, senha do cliente gerente, contratos e usuarios dos professores.</p>
+              </div>
+
+              <form id="detail-form" class="stack hidden">
+                <div class="detail-top">
+                  <div class="detail-grid">
+                    <label>
+                      <span>Nome do cliente</span>
+                      <input id="detail-name" type="text" />
+                    </label>
+                    <label>
+                      <span>Email do cliente gerente</span>
+                      <input id="detail-email" type="email" />
+                    </label>
+                    <label>
+                      <span>Plano</span>
+                      <input id="detail-plan" type="text" />
+                    </label>
+                    <label>
+                      <span>Valor por dispositivo (R$)</span>
+                      <input id="detail-price" type="number" min="0" step="0.01" placeholder="0,00" />
+                    </label>
+                    <label>
+                      <span>Numero de dispositivos</span>
+                      <input id="detail-device-count" type="number" min="1" step="1" placeholder="1" />
+                    </label>
+                    <label>
+                      <span>Vence em</span>
+                      <input id="detail-expiry" type="date" />
+                    </label>
+                    <label>
+                      <span>Nova senha do cliente gerente</span>
+                      <input id="detail-password" type="text" placeholder="Digite so se for redefinir" />
+                    </label>
+                  </div>
+
+                  <div class="detail-facts">
+                    <div class="fact-card">
+                      <span>Status atual</span>
+                      <strong id="detail-status">-</strong>
+                    </div>
+                    <div class="fact-card">
+                      <span>Usuarios permitidos</span>
+                      <strong id="detail-contracted-devices">-</strong>
+                    </div>
+                    <div class="fact-card">
+                      <span>Dispositivos em uso</span>
+                      <strong id="detail-device-usage">-</strong>
+                    </div>
+                    <div class="fact-card">
+                      <span>Valor por dispositivo</span>
+                      <strong id="detail-price-per-device">-</strong>
+                    </div>
+                    <div class="fact-card">
+                      <span>Valor atual</span>
+                      <strong id="detail-current-value">-</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="detail-secondary">
+                  <label>
+                    <span>Observacoes</span>
+                    <textarea id="detail-notes" rows="5"></textarea>
+                  </label>
+
+                  <div class="block-panel">
+                    <label class="toggle-row">
+                      <input id="detail-blocked" type="checkbox" />
+                      <span>Bloquear remotamente este cliente</span>
+                    </label>
+
+                    <label>
+                      <span>Motivo do bloqueio</span>
+                      <input id="detail-blocked-reason" type="text" placeholder="Ex.: assinatura em atraso" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="device-panel">
+                  <div class="list-head">
+                    <div>
+                      <p class="section-kicker">Dispositivos do cliente</p>
+                      <h2>Maquinas vinculadas</h2>
+                    </div>
+                    <p class="helper-copy">Cada item mostra qual usuario esta ocupando o dispositivo e o ultimo uso recebido pelo controle.</p>
+                  </div>
+                  <div id="detail-devices-list" class="stack"></div>
+                </div>
+
+                <div class="library-panel">
+                  <div class="list-head">
+                    <div>
+                      <p class="section-kicker">Arquivos compartilhados</p>
+                      <h2>Apps, documentos e logs</h2>
+                    </div>
+                    <p class="helper-copy">Tudo que for enviado aqui fica disponivel para os usuarios deste cliente baixarem.</p>
+                  </div>
+
+                  <div id="file-upload-form" class="file-upload-form">
+                    <label>
+                      <span>Tipo</span>
+                      <select id="file-category">
+                        <option value="app">Aplicativo</option>
+                        <option value="document">Documento</option>
+                        <option value="log">Log</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Titulo</span>
+                      <input id="file-title" type="text" placeholder="Ex.: Instalador versao 2.2" />
+                    </label>
+                    <label>
+                      <span>Arquivo</span>
+                      <input id="file-input" type="file" required />
+                    </label>
+                    <label class="file-description-field">
+                      <span>Descricao</span>
+                      <input id="file-description" type="text" placeholder="Observacao opcional para quem vai baixar" />
+                    </label>
+                    <button id="file-upload-button" type="button">Enviar arquivo</button>
+                  </div>
+
+                  <div id="library-files-list" class="library-list"></div>
+                </div>
+
+                <div class="action-cluster">
+                  <button id="save-customer-button" type="submit">Salvar alteracoes</button>
+                  <button class="ghost" id="extend-customer-button" type="button">Prorrogar +30 dias</button>
+                  <button class="ghost" id="reset-password-button" type="button">Aplicar nova senha</button>
+                  <button class="ghost" id="clear-devices-button" type="button">Limpar dispositivos</button>
+                </div>
+              </form>
+            </article>
+
+            <div class="support-grid">
+              <article class="panel create-panel">
+                <div class="panel-head panel-head-compact">
+                  <div>
+                    <p class="section-kicker">Usuarios do cliente</p>
+                    <h2>Professores e aparelhos</h2>
+                  </div>
+                </div>
+
+                <div id="manager-users-list" class="stack portal-note"></div>
+                <div id="teacher-limit-note" class="helper-copy"></div>
+                <div id="teacher-users-list" class="stack"></div>
+
+                <div class="panel-divider" aria-hidden="true"></div>
+
+                <form id="teacher-user-form" class="stack">
+                  <label>
+                    <span>Nome do professor</span>
+                    <input id="teacher-name" type="text" placeholder="Ex.: Prof. Ana Souza" required />
+                  </label>
+                  <label>
+                    <span>Email do professor</span>
+                    <input id="teacher-email" type="email" placeholder="professor@alfatec.com" required />
+                  </label>
+                  <label>
+                    <span>Senha inicial</span>
+                    <input id="teacher-password" type="text" placeholder="123456" required />
+                  </label>
+                  <button type="submit">Criar usuario do professor</button>
+                </form>
+              </article>
+
+              <article class="panel settings-panel">
+                <div class="panel-head panel-head-compact">
+                  <div>
+                    <p class="section-kicker">Admin</p>
+                    <h2>Conta principal</h2>
+                  </div>
+                </div>
+
+                <div class="settings-summary">
+                  <div class="fact-card">
+                    <span>Conta conectada</span>
+                    <strong id="admin-email-display">-</strong>
+                  </div>
+                  <div class="fact-card">
+                    <span>Papel</span>
+                    <strong id="viewer-role-display">-</strong>
+                    <p>O admin controla todos os clientes. O cliente gerente controla apenas seus professores.</p>
+                  </div>
+                </div>
+
+                <form id="admin-settings-form" class="stack">
+                  <label>
+                    <span>Senha atual</span>
+                    <input id="admin-current-password" type="password" placeholder="Digite a senha atual" autocomplete="current-password" />
+                  </label>
+                  <label>
+                    <span>Nova senha</span>
+                    <input id="admin-new-password" type="password" placeholder="Crie uma nova senha" autocomplete="new-password" />
+                  </label>
+                  <label>
+                    <span>Confirmar nova senha</span>
+                    <input id="admin-confirm-password" type="password" placeholder="Repita a nova senha" autocomplete="new-password" />
+                  </label>
+                  <button type="submit">Atualizar senha do admin</button>
+                </form>
+
+                <div class="panel-divider" aria-hidden="true"></div>
+
+                <form id="customer-form" class="stack">
+                  <label>
+                    <span>Nome do cliente</span>
+                    <input id="customer-name" type="text" placeholder="Escola Exemplo" required />
+                  </label>
+                  <label>
+                    <span>Email do cliente gerente</span>
+                    <input id="customer-email" type="email" placeholder="cliente@alfatec.com" required />
+                  </label>
+                  <label>
+                    <span>Senha inicial</span>
+                    <input id="customer-password" type="text" placeholder="123456" required />
+                  </label>
+                  <label>
+                    <span>Plano</span>
+                    <input id="customer-plan" type="text" value="Plano Mensal" />
+                  </label>
+                  <label>
+                    <span>Valor por dispositivo (R$)</span>
+                    <input id="customer-price" type="number" min="0" step="0.01" placeholder="0,00" />
+                  </label>
+                  <label>
+                    <span>Numero de dispositivos</span>
+                    <input id="customer-device-count" type="number" min="1" step="1" value="1" required />
+                  </label>
+                  <label>
+                    <span>Vence em</span>
+                    <input id="customer-expiry" type="date" required />
+                  </label>
+                  <label>
+                    <span>Observacoes</span>
+                    <textarea id="customer-notes" rows="4" placeholder="Ex.: pacote com suporte mensal"></textarea>
+                  </label>
+                  <button type="submit">Criar cliente</button>
+                </form>
+              </article>
+            </div>
+
+            <section class="panel audit-panel">
+              <div class="panel-head panel-head-compact">
+                <div>
+                  <p class="section-kicker">Ultimos eventos</p>
+                  <h2>Auditoria recente</h2>
+                </div>
+              </div>
+              <div id="audit-list" class="audit-list"></div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <datalist id="plan-options">
+      <option value="Plano Mensal"></option>
+      <option value="Plano Anual"></option>
+    </datalist>
+
+    <div class="toast hidden" id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
