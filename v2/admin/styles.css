@@ -388,6 +388,27 @@ code {
   font-size: 1rem;
 }
 
+.password-field {
+  gap: 0.55rem;
+}
+
+.password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.password-input-row input {
+  min-width: 0;
+}
+
+.password-toggle {
+  min-width: 108px;
+  padding-inline: 0.95rem;
+  align-self: stretch;
+}
+
 .login-form button {
   min-height: 56px;
   font-size: 1rem;
@@ -1081,6 +1102,15 @@ code {
 
   .login-brand-logo {
     max-width: 120px;
+  }
+
+  .password-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .password-toggle {
+    width: 100%;
+    min-width: 0;
   }
 
   .guide-list,

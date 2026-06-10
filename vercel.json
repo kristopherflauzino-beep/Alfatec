@@ -6,6 +6,11 @@
       "source": "/admin",
       "destination": "/",
       "permanent": false
+    },
+    {
+      "source": "/admin/",
+      "destination": "/",
+      "permanent": false
     }
   ],
   "rewrites": [
@@ -22,8 +27,8 @@
       "destination": "/:path*"
     },
     {
-      "source": "/app.js",
-      "destination": "/v2/admin/app.js"
+      "source": "/panel.js",
+      "destination": "/v2/admin/panel.js"
     },
     {
       "source": "/styles.css",

@@ -19,6 +19,7 @@ const elements = {
   loginForm: document.getElementById("login-form"),
   loginEmail: document.getElementById("login-email"),
   loginPassword: document.getElementById("login-password"),
+  toggleLoginPassword: document.getElementById("toggle-login-password"),
   serverName: document.getElementById("server-name"),
   healthStatus: document.getElementById("health-status"),
   sessionStatus: document.getElementById("session-status"),
@@ -238,6 +239,18 @@ function nextMonthDate() {
   const date = new Date();
   date.setMonth(date.getMonth() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+function togglePasswordVisibility(input, button) {
+  if (!input || !button) {
+    return;
+  }
+
+  const shouldShow = input.type === "password";
+  input.type = shouldShow ? "text" : "password";
+  button.textContent = shouldShow ? "Ocultar" : "Mostrar";
+  button.setAttribute("aria-pressed", shouldShow ? "true" : "false");
+  button.setAttribute("aria-label", shouldShow ? "Ocultar senha" : "Mostrar senha");
 }
 
 function toEndOfDayIso(dateInputValue) {
@@ -990,6 +1003,22 @@ async function copySelectedEmail() {
 elements.loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   handleLogin().catch((error) => showToast(error.message || "Nao foi possivel entrar."));
+});
+
+if (elements.toggleLoginPassword) {
+  elements.toggleLoginPassword.addEventListener("click", () => {
+    togglePasswordVisibility(elements.loginPassword, elements.toggleLoginPassword);
+  });
+}
+
+document.querySelectorAll("[data-toggle-password-target]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const targetId = button.getAttribute("data-toggle-password-target");
+    if (!targetId) {
+      return;
+    }
+    togglePasswordVisibility(document.getElementById(targetId), button);
+  });
 });
 
 elements.headerRefreshButton.addEventListener("click", () => {

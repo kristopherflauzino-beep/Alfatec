@@ -78,9 +78,20 @@
                 <span>Email</span>
                 <input id="login-email" type="email" value="" placeholder="seu-email@alfatec.com" autocomplete="username" />
               </label>
-              <label>
+              <label class="password-field">
                 <span>Senha</span>
-                <input id="login-password" type="password" value="" placeholder="Digite sua senha" autocomplete="current-password" />
+                <div class="password-input-row">
+                  <input id="login-password" type="password" value="" placeholder="Digite sua senha" autocomplete="current-password" />
+                  <button
+                    id="toggle-login-password"
+                    class="ghost password-toggle"
+                    type="button"
+                    aria-label="Mostrar senha"
+                    aria-pressed="false"
+                  >
+                    Mostrar
+                  </button>
+                </div>
               </label>
               <button type="submit">Entrar no Controle AlfaTec</button>
             </form>
@@ -418,17 +429,50 @@
                 </div>
 
                 <form id="admin-settings-form" class="stack">
-                  <label>
+                  <label class="password-field">
                     <span>Senha atual</span>
-                    <input id="admin-current-password" type="password" placeholder="Digite a senha atual" autocomplete="current-password" />
+                    <div class="password-input-row">
+                      <input id="admin-current-password" type="password" placeholder="Digite a senha atual" autocomplete="current-password" />
+                      <button
+                        class="ghost password-toggle"
+                        type="button"
+                        data-toggle-password-target="admin-current-password"
+                        aria-label="Mostrar senha atual"
+                        aria-pressed="false"
+                      >
+                        Mostrar
+                      </button>
+                    </div>
                   </label>
-                  <label>
+                  <label class="password-field">
                     <span>Nova senha</span>
-                    <input id="admin-new-password" type="password" placeholder="Crie uma nova senha" autocomplete="new-password" />
+                    <div class="password-input-row">
+                      <input id="admin-new-password" type="password" placeholder="Crie uma nova senha" autocomplete="new-password" />
+                      <button
+                        class="ghost password-toggle"
+                        type="button"
+                        data-toggle-password-target="admin-new-password"
+                        aria-label="Mostrar nova senha"
+                        aria-pressed="false"
+                      >
+                        Mostrar
+                      </button>
+                    </div>
                   </label>
-                  <label>
+                  <label class="password-field">
                     <span>Confirmar nova senha</span>
-                    <input id="admin-confirm-password" type="password" placeholder="Repita a nova senha" autocomplete="new-password" />
+                    <div class="password-input-row">
+                      <input id="admin-confirm-password" type="password" placeholder="Repita a nova senha" autocomplete="new-password" />
+                      <button
+                        class="ghost password-toggle"
+                        type="button"
+                        data-toggle-password-target="admin-confirm-password"
+                        aria-label="Mostrar confirmacao da senha"
+                        aria-pressed="false"
+                      >
+                        Mostrar
+                      </button>
+                    </div>
                   </label>
                   <button type="submit">Atualizar senha do admin</button>
                 </form>
@@ -493,6 +537,6 @@
     </datalist>
 
     <div class="toast hidden" id="toast"></div>
-    <script src="app.js"></script>
+    <script src="panel.js"></script>
   </body>
 </html>
