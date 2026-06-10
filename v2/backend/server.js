@@ -4,21 +4,25 @@ const os = require("os");
 const path = require("path");
 const { signToken, verifyToken } = require("./auth");
 const {
-  DATA_FILE,
   DEFAULT_ADMIN_EMAIL,
   normalizeManagedEmail,
   appendAudit,
   createId,
   hashPassword,
-  mutateStore,
-  readStore,
   rebuildCustomerDeviceIds,
   verifyPassword,
 } = require("./store");
+const {
+  getDataFileLabel,
+  loadUploadedFile,
+  mutateStore,
+  readStore,
+  removeUploadedFile,
+  saveUploadedFile,
+} = require("./storage");
 
 const PORT = Number(process.env.PORT || process.env.V2_SERVER_PORT || 8787);
 const ADMIN_DIR = path.join(__dirname, "..", "admin");
-const UPLOADS_DIR = path.join(__dirname, "uploads");
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const JSON_BODY_LIMIT = 1024 * 64;
 const FILE_BODY_LIMIT = 1024 * 1024 * 120;
@@ -63,6 +67,18 @@ function sendDownload(response, filePath, file) {
     "Content-Disposition": `attachment; filename="${encodeURIComponent(file.originalName || file.title || "arquivo")}"`,
   });
   fs.createReadStream(filePath).pipe(response);
+}
+
+function sendDownloadBuffer(response, file, body) {
+  response.writeHead(200, {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Device-Id",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Content-Type": file.mimeType || "application/octet-stream",
+    "Content-Length": body.length,
+    "Content-Disposition": `attachment; filename="${encodeURIComponent(file.originalName || file.title || "arquivo")}"`,
+  });
+  response.end(body);
 }
 
 function redirect(response, location) {
@@ -579,7 +595,7 @@ function renderOverview(store, viewer) {
 
   return {
     serverName: store.settings.serverName,
-    dataFile: DATA_FILE,
+    dataFile: getDataFileLabel(),
     viewer: {
       id: viewer.id,
       role: viewer.role,
@@ -655,8 +671,8 @@ function serveAdminAsset(requestPath, response) {
   sendText(response, 200, textTypes[extension] || "text/html", fs.readFileSync(filePath, "utf8"));
 }
 
-function requireAuthenticatedUser(request, response) {
-  const store = readStore();
+async function requireAuthenticatedUser(request, response) {
+  const store = await readStore();
   const token = getBearerToken(request);
 
   try {
@@ -675,8 +691,8 @@ function requireAuthenticatedUser(request, response) {
   }
 }
 
-function requireAdmin(request, response) {
-  const session = requireAuthenticatedUser(request, response);
+async function requireAdmin(request, response) {
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return null;
   }
@@ -689,8 +705,8 @@ function requireAdmin(request, response) {
   return session;
 }
 
-function requirePortalUser(request, response) {
-  const session = requireAuthenticatedUser(request, response);
+async function requirePortalUser(request, response) {
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return null;
   }
@@ -703,8 +719,8 @@ function requirePortalUser(request, response) {
   return session;
 }
 
-function requireLicensedUser(request, response) {
-  const session = requireAuthenticatedUser(request, response);
+async function requireLicensedUser(request, response) {
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return null;
   }
@@ -789,7 +805,7 @@ function issueToken(store, user) {
 
 async function handleLogin(request, response) {
   const body = await readJsonBody(request);
-  const store = readStore();
+  const store = await readStore();
   const email = normalizeEmail(body.email);
   const password = `${body.password || ""}`;
   const deviceId = `${body.deviceId || ""}`.trim();
@@ -829,7 +845,7 @@ async function handleLogin(request, response) {
     license = buildLicenseSnapshot(store, customer);
   }
 
-  mutateStore((mutableStore) => {
+  await mutateStore((mutableStore) => {
     const mutableUser = findUserById(mutableStore, user.id);
     if (!mutableUser) {
       return;
@@ -859,7 +875,7 @@ async function handleLogin(request, response) {
     );
   });
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const freshUser = findUserByEmail(freshStore, email);
   const freshCustomer = freshUser && freshUser.customerId ? findCustomerById(freshStore, freshUser.customerId) : null;
 
@@ -882,8 +898,8 @@ async function handleLogin(request, response) {
   });
 }
 
-function handleLicenseValidate(request, response) {
-  const session = requireLicensedUser(request, response);
+async function handleLicenseValidate(request, response) {
+  const session = await requireLicensedUser(request, response);
   if (!session) {
     return;
   }
@@ -908,7 +924,7 @@ function handleLicenseValidate(request, response) {
   }
 
   if (deviceCheck.shouldBind && deviceId) {
-    mutateStore((mutableStore) => {
+    await mutateStore((mutableStore) => {
       bindUserToDevice(mutableStore, session.user.id, deviceId);
       appendAudit(
         mutableStore,
@@ -923,7 +939,7 @@ function handleLicenseValidate(request, response) {
     });
   }
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const freshCustomer = findCustomerById(freshStore, session.user.customerId);
   sendJson(response, 200, {
     serverTime: new Date().toISOString(),
@@ -931,8 +947,8 @@ function handleLicenseValidate(request, response) {
   });
 }
 
-function handlePortalOverview(request, response) {
-  const session = requirePortalUser(request, response);
+async function handlePortalOverview(request, response) {
+  const session = await requirePortalUser(request, response);
   if (!session) {
     return;
   }
@@ -941,7 +957,7 @@ function handlePortalOverview(request, response) {
 }
 
 async function handleClientSync(request, response) {
-  const session = requireLicensedUser(request, response);
+  const session = await requireLicensedUser(request, response);
   if (!session) {
     return;
   }
@@ -963,7 +979,7 @@ async function handleClientSync(request, response) {
     return;
   }
 
-  mutateStore((mutableStore) => {
+  await mutateStore((mutableStore) => {
     const mutableUser = findUserById(mutableStore, session.user.id);
     if (!mutableUser) {
       return;
@@ -984,7 +1000,7 @@ async function handleClientSync(request, response) {
     rebuildCustomerDeviceIds(mutableStore);
   });
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const freshUser = findUserById(freshStore, session.user.id);
   sendJson(response, 200, {
     ok: true,
@@ -993,7 +1009,7 @@ async function handleClientSync(request, response) {
 }
 
 async function handleCreateCustomer(request, response) {
-  const session = requireAdmin(request, response);
+  const session = await requireAdmin(request, response);
   if (!session) {
     return;
   }
@@ -1031,7 +1047,7 @@ async function handleCreateCustomer(request, response) {
     return;
   }
 
-  const result = mutateStore((mutableStore) => {
+  const result = await mutateStore((mutableStore) => {
     const customerId = createId("customer");
     const userId = createId("user");
     const credentials = hashPassword(password);
@@ -1085,13 +1101,13 @@ async function handleCreateCustomer(request, response) {
     return customerId;
   });
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const customer = findCustomerById(freshStore, result);
   sendJson(response, 201, sanitizeCustomerForPortal(freshStore, customer));
 }
 
 async function handleUpdateCustomer(request, response, customerId) {
-  const session = requireAdmin(request, response);
+  const session = await requireAdmin(request, response);
   if (!session) {
     return;
   }
@@ -1100,7 +1116,7 @@ async function handleUpdateCustomer(request, response, customerId) {
   let result;
 
   try {
-    result = mutateStore((mutableStore) => {
+    result = await mutateStore((mutableStore) => {
       const customer = findCustomerById(mutableStore, customerId);
       if (!customer) {
         return null;
@@ -1165,13 +1181,13 @@ async function handleUpdateCustomer(request, response, customerId) {
     return;
   }
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const customer = findCustomerById(freshStore, result);
   sendJson(response, 200, sanitizeCustomerForPortal(freshStore, customer));
 }
 
 async function handleResetCustomerPassword(request, response, customerId) {
-  const session = requireAdmin(request, response);
+  const session = await requireAdmin(request, response);
   if (!session) {
     return;
   }
@@ -1183,7 +1199,7 @@ async function handleResetCustomerPassword(request, response, customerId) {
     return;
   }
 
-  const updated = mutateStore((mutableStore) => {
+  const updated = await mutateStore((mutableStore) => {
     const user = getManagerUsers(mutableStore, customerId)[0];
     if (!user) {
       return false;
@@ -1211,8 +1227,8 @@ async function handleResetCustomerPassword(request, response, customerId) {
   sendJson(response, 200, { ok: true });
 }
 
-function handleClearDevices(request, response, customerId) {
-  const session = requirePortalUser(request, response);
+async function handleClearDevices(request, response, customerId) {
+  const session = await requirePortalUser(request, response);
   if (!session) {
     return;
   }
@@ -1222,7 +1238,7 @@ function handleClearDevices(request, response, customerId) {
     return;
   }
 
-  const updated = mutateStore((mutableStore) => {
+  const updated = await mutateStore((mutableStore) => {
     const users = getCustomerUsers(mutableStore, customerId);
     if (!users.length) {
       return false;
@@ -1252,7 +1268,7 @@ function handleClearDevices(request, response, customerId) {
 }
 
 async function handleCreatePortalUser(request, response) {
-  const session = requirePortalUser(request, response);
+  const session = await requirePortalUser(request, response);
   if (!session) {
     return;
   }
@@ -1296,7 +1312,7 @@ async function handleCreatePortalUser(request, response) {
     return;
   }
 
-  const createdUserId = mutateStore((mutableStore) => {
+  const createdUserId = await mutateStore((mutableStore) => {
     const credentials = hashPassword(password);
     const userId = createId("user");
     const nowIso = new Date().toISOString();
@@ -1331,13 +1347,13 @@ async function handleCreatePortalUser(request, response) {
     return userId;
   });
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const user = findUserById(freshStore, createdUserId);
   sendJson(response, 201, sanitizePortalUser(user));
 }
 
 async function handleUpdatePortalUser(request, response, userId) {
-  const session = requirePortalUser(request, response);
+  const session = await requirePortalUser(request, response);
   if (!session) {
     return;
   }
@@ -1361,7 +1377,7 @@ async function handleUpdatePortalUser(request, response, userId) {
   const body = await readJsonBody(request);
 
   try {
-    const updated = mutateStore((mutableStore) => {
+    const updated = await mutateStore((mutableStore) => {
       const mutableUser = findUserById(mutableStore, userId);
       if (!mutableUser) {
         return false;
@@ -1418,13 +1434,13 @@ async function handleUpdatePortalUser(request, response, userId) {
     return;
   }
 
-  const freshStore = readStore();
+  const freshStore = await readStore();
   const freshUser = findUserById(freshStore, userId);
   sendJson(response, 200, sanitizePortalUser(freshUser));
 }
 
-function handleDeletePortalUser(request, response, userId) {
-  const session = requireAdmin(request, response);
+async function handleDeletePortalUser(request, response, userId) {
+  const session = await requireAdmin(request, response);
   if (!session) {
     return;
   }
@@ -1435,7 +1451,7 @@ function handleDeletePortalUser(request, response, userId) {
     return;
   }
 
-  const removed = mutateStore((mutableStore) => {
+  const removed = await mutateStore((mutableStore) => {
     const userIndex = mutableStore.users.findIndex((user) => user.id === userId && user.role !== "admin");
     if (userIndex < 0) {
       return null;
@@ -1461,7 +1477,7 @@ function handleDeletePortalUser(request, response, userId) {
 }
 
 async function handleUploadLibraryFile(request, response) {
-  const session = requireAuthenticatedUser(request, response);
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return;
   }
@@ -1487,13 +1503,16 @@ async function handleUploadLibraryFile(request, response) {
     return;
   }
 
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   const fileId = createId("file");
   const originalName = sanitizeFilename(uploadedFile.originalName);
   const storedName = `${fileId}-${originalName}`;
-  fs.writeFileSync(path.join(UPLOADS_DIR, storedName), uploadedFile.buffer);
+  const storedFile = await saveUploadedFile({
+    storedName,
+    buffer: uploadedFile.buffer,
+    mimeType: uploadedFile.mimeType || "application/octet-stream",
+  });
 
-  const createdFile = mutateStore((mutableStore) => {
+  const createdFile = await mutateStore((mutableStore) => {
     const nowIso = new Date().toISOString();
     const libraryFile = {
       id: fileId,
@@ -1505,7 +1524,8 @@ async function handleUploadLibraryFile(request, response) {
       title: normalizeText(fields.title, originalName),
       description: normalizeText(fields.description),
       originalName,
-      storedName,
+      storedName: storedFile.storedName,
+      storedUrl: storedFile.storedUrl,
       mimeType: uploadedFile.mimeType || "application/octet-stream",
       size: uploadedFile.buffer.length,
       createdAt: nowIso,
@@ -1525,8 +1545,8 @@ async function handleUploadLibraryFile(request, response) {
   sendJson(response, 201, sanitizeLibraryFile(createdFile));
 }
 
-function handleDownloadLibraryFile(request, response, fileId) {
-  const session = requireAuthenticatedUser(request, response);
+async function handleDownloadLibraryFile(request, response, fileId) {
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return;
   }
@@ -1542,17 +1562,17 @@ function handleDownloadLibraryFile(request, response, fileId) {
     return;
   }
 
-  const filePath = path.resolve(UPLOADS_DIR, file.storedName);
-  if (!filePath.startsWith(UPLOADS_DIR) || !fs.existsSync(filePath)) {
+  const loadedFile = await loadUploadedFile(file);
+  if (!loadedFile) {
     sendJson(response, 404, { error: "Arquivo fisico nao encontrado." });
     return;
   }
 
-  sendDownload(response, filePath, file);
+  sendDownloadBuffer(response, file, loadedFile.body);
 }
 
-function handleDeleteLibraryFile(request, response, fileId) {
-  const session = requireAuthenticatedUser(request, response);
+async function handleDeleteLibraryFile(request, response, fileId) {
+  const session = await requireAuthenticatedUser(request, response);
   if (!session) {
     return;
   }
@@ -1568,7 +1588,7 @@ function handleDeleteLibraryFile(request, response, fileId) {
     return;
   }
 
-  const removed = mutateStore((mutableStore) => {
+  const removed = await mutateStore((mutableStore) => {
     const index = (mutableStore.files || []).findIndex((entry) => entry.id === fileId);
     if (index < 0) {
       return null;
@@ -1584,17 +1604,14 @@ function handleDeleteLibraryFile(request, response, fileId) {
   });
 
   if (removed?.storedName) {
-    const filePath = path.resolve(UPLOADS_DIR, removed.storedName);
-    if (filePath.startsWith(UPLOADS_DIR) && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    await removeUploadedFile(removed);
   }
 
   sendJson(response, 200, { ok: true });
 }
 
 async function handleAdminPasswordChange(request, response) {
-  const session = requireAdmin(request, response);
+  const session = await requireAdmin(request, response);
   if (!session) {
     return;
   }
@@ -1619,7 +1636,7 @@ async function handleAdminPasswordChange(request, response) {
   }
 
   const credentials = hashPassword(newPassword);
-  mutateStore((mutableStore) => {
+  await mutateStore((mutableStore) => {
     const adminUser = findUserById(mutableStore, session.user.id);
     if (!adminUser) {
       throw new Error("Conta administrativa nao encontrada.");
@@ -1653,7 +1670,7 @@ async function routeRequest(request, response) {
   }
 
   if (request.method === "GET" && pathname === "/api/health") {
-    const store = readStore();
+    const store = await readStore();
     sendJson(response, 200, {
       ok: true,
       serverTime: new Date().toISOString(),
@@ -1669,7 +1686,7 @@ async function routeRequest(request, response) {
   }
 
   if (request.method === "GET" && pathname === "/api/license/validate") {
-    handleLicenseValidate(request, response);
+    await handleLicenseValidate(request, response);
     return;
   }
 
@@ -1679,7 +1696,7 @@ async function routeRequest(request, response) {
   }
 
   if (request.method === "GET" && (pathname === "/api/portal/overview" || pathname === "/api/admin/overview")) {
-    handlePortalOverview(request, response);
+    await handlePortalOverview(request, response);
     return;
   }
 
@@ -1717,7 +1734,7 @@ async function routeRequest(request, response) {
 
   const clearDevicesMatch = pathname.match(/^\/api\/admin\/customers\/([^/]+)\/clear-devices$/);
   if (request.method === "POST" && clearDevicesMatch) {
-    handleClearDevices(request, response, clearDevicesMatch[1]);
+    await handleClearDevices(request, response, clearDevicesMatch[1]);
     return;
   }
 
@@ -1728,19 +1745,19 @@ async function routeRequest(request, response) {
   }
 
   if (request.method === "DELETE" && updatePortalUserMatch) {
-    handleDeletePortalUser(request, response, updatePortalUserMatch[1]);
+    await handleDeletePortalUser(request, response, updatePortalUserMatch[1]);
     return;
   }
 
   const downloadFileMatch = pathname.match(/^\/api\/files\/([^/]+)\/download$/);
   if (request.method === "GET" && downloadFileMatch) {
-    handleDownloadLibraryFile(request, response, downloadFileMatch[1]);
+    await handleDownloadLibraryFile(request, response, downloadFileMatch[1]);
     return;
   }
 
   const deleteFileMatch = pathname.match(/^\/api\/files\/([^/]+)$/);
   if (request.method === "DELETE" && deleteFileMatch) {
-    handleDeleteLibraryFile(request, response, deleteFileMatch[1]);
+    await handleDeleteLibraryFile(request, response, deleteFileMatch[1]);
     return;
   }
 
@@ -1752,25 +1769,40 @@ async function routeRequest(request, response) {
   sendJson(response, 404, { error: "Rota nao encontrada." });
 }
 
-const server = http.createServer((request, response) => {
-  routeRequest(request, response).catch((error) => {
+function handleRequest(request, response) {
+  return routeRequest(request, response).catch((error) => {
     sendJson(response, 500, {
       error: error.message || "Erro interno do servidor.",
     });
   });
-});
+}
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[V2] Servidor iniciado em http://localhost:${PORT}`);
-  console.log(`[V2] Controle AlfaTec em http://localhost:${PORT}/admin`);
-  const networkUrls = listNetworkUrls();
-  if (networkUrls.length) {
-    console.log("[V2] URLs de rede local:");
-    for (const url of networkUrls) {
-      console.log(`  ${url}`);
+function createServer() {
+  return http.createServer((request, response) => {
+    handleRequest(request, response);
+  });
+}
+
+if (require.main === module) {
+  const server = createServer();
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`[V2] Servidor iniciado em http://localhost:${PORT}`);
+    console.log(`[V2] Controle AlfaTec em http://localhost:${PORT}/admin`);
+    const networkUrls = listNetworkUrls();
+    if (networkUrls.length) {
+      console.log("[V2] URLs de rede local:");
+      for (const url of networkUrls) {
+        console.log(`  ${url}`);
+      }
     }
-  }
-  console.log("[V2] Credenciais iniciais:");
-  console.log(`  Admin   -> ${DEFAULT_ADMIN_EMAIL} / admin123`);
-  console.log("  Cliente -> cliente@alfatec.com / demo123");
-});
+    console.log("[V2] Credenciais iniciais:");
+    console.log(`  Admin   -> ${DEFAULT_ADMIN_EMAIL} / admin123`);
+    console.log("  Cliente -> cliente@alfatec.com / demo123");
+  });
+}
+
+module.exports = {
+  createServer,
+  handleRequest,
+  routeRequest,
+};

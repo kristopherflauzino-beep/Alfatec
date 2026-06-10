@@ -328,6 +328,7 @@ function normalizeLibraryFile(rawFile, nowIso) {
     description: `${rawFile.description || ""}`.trim(),
     originalName: `${rawFile.originalName || rawFile.filename || "arquivo"}`.trim() || "arquivo",
     storedName: `${rawFile.storedName || rawFile.filename || ""}`.trim(),
+    storedUrl: `${rawFile.storedUrl || ""}`.trim(),
     mimeType: `${rawFile.mimeType || "application/octet-stream"}`.trim(),
     size: Number.isInteger(rawFile.size) && rawFile.size >= 0 ? rawFile.size : 0,
     createdAt: rawFile.createdAt || nowIso,
@@ -466,7 +467,9 @@ function normalizeStore(rawStore) {
       ? incomingStore.audit.map((entry) => normalizeAuditEntry(entry, nowIso))
       : [],
     files: Array.isArray(incomingStore.files)
-      ? incomingStore.files.map((file) => normalizeLibraryFile(file, nowIso)).filter((file) => file.customerId && file.storedName)
+      ? incomingStore.files
+        .map((file) => normalizeLibraryFile(file, nowIso))
+        .filter((file) => file.customerId && file.storedName)
       : [],
   };
 

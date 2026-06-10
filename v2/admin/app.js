@@ -7,6 +7,12 @@ const state = {
   statusFilter: "all",
 };
 
+const REMOTE_API_BASE_URL = "https://alfatec-api.vercel.app";
+const API_BASE_URL = ["localhost", "127.0.0.1"].includes(window.location.hostname) ||
+  window.location.hostname.startsWith("alfatec-api")
+  ? ""
+  : REMOTE_API_BASE_URL;
+
 const elements = {
   entryPanel: document.getElementById("entry-panel"),
   portal: document.getElementById("portal"),
@@ -132,7 +138,7 @@ function normalizeAlfaTecEmailValue(value) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -150,7 +156,7 @@ async function api(path, options = {}) {
 }
 
 async function apiForm(path, formData) {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
       ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
@@ -167,7 +173,7 @@ async function apiForm(path, formData) {
 }
 
 async function loadHealth() {
-  const response = await fetch("/api/health");
+  const response = await fetch(`${API_BASE_URL}/api/health`);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.error || "Servidor sem resposta.");

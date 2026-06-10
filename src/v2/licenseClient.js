@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
   rememberedLogin: "@chamada_v2_remembered_login",
 };
 
-const PUBLIC_VERCEL_API_URL = "https://alfatec-flauzino-s-projects.vercel.app";
+const PUBLIC_VERCEL_API_URL = "https://alfatec-api.vercel.app";
 
 const DEFAULT_GITHUB_CONFIG_URLS = [
   "https://kristopherflauzino-beep.github.io/Alfatec/v2/mobile-server-config.json",

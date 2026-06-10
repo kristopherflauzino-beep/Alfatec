@@ -14,7 +14,7 @@ from app_desktop import APP_TITLE, AttendanceDesktopApp, resolve_storage_dir
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_API_URL = "https://alfatec-flauzino-s-projects.vercel.app"
+DEFAULT_API_URL = "https://alfatec-api.vercel.app"
 LEGACY_API_URLS = {
     "http://localhost:8787",
     "http://127.0.0.1:8787",

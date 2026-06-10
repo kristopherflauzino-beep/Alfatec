@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api",
+      "destination": "/api"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api?path=:path"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/:path*"
+    },
+    {
+      "source": "/app.js",
+      "destination": "/v2/admin/app.js"
+    },
+    {
+      "source": "/styles.css",
+      "destination": "/v2/admin/styles.css"
+    },
+    {
+      "source": "/alfatec-logo.png",
+      "destination": "/v2/admin/alfatec-logo.png"
+    },
+    {
+      "source": "/",
+      "destination": "/v2/admin/index"
+    }
+  ]
+}
