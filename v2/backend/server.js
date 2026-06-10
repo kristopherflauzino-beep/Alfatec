@@ -1476,6 +1476,72 @@ async function handleDeletePortalUser(request, response, userId) {
   sendJson(response, 200, { ok: true });
 }
 
+async function handleSetCustomerManager(request, response, customerId) {
+  const session = await requireAdmin(request, response);
+  if (!session) {
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const userId = normalizeText(body.userId);
+
+  if (!userId) {
+    sendJson(response, 400, { error: "Informe qual usuario sera o gerente." });
+    return;
+  }
+
+  const customer = findCustomerById(session.store, customerId);
+  if (!customer) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  const targetUser = findUserById(session.store, userId);
+  if (!targetUser || targetUser.customerId !== customerId || targetUser.role === "admin") {
+    sendJson(response, 404, { error: "Usuario do cliente nao encontrado." });
+    return;
+  }
+
+  await mutateStore((mutableStore) => {
+    const mutableCustomer = findCustomerById(mutableStore, customerId);
+    const mutableTargetUser = findUserById(mutableStore, userId);
+    if (!mutableCustomer || !mutableTargetUser) {
+      throw new Error("Nao foi possivel localizar o cliente ou usuario.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const currentManagers = getManagerUsers(mutableStore, customerId);
+
+    for (const manager of currentManagers) {
+      if (manager.id !== mutableTargetUser.id) {
+        manager.role = "teacher";
+        manager.updatedAt = nowIso;
+      }
+    }
+
+    mutableTargetUser.role = "customer_manager";
+    mutableTargetUser.status = "active";
+    mutableTargetUser.updatedAt = nowIso;
+    mutableCustomer.email = mutableTargetUser.email;
+    mutableCustomer.updatedAt = nowIso;
+
+    appendAudit(
+      mutableStore,
+      "manager-set",
+      `Usuario ${mutableTargetUser.email} definido como gerente por ${session.user.email}.`,
+      {
+        customerId,
+        userId: mutableTargetUser.id,
+        by: session.user.email,
+      }
+    );
+  });
+
+  const freshStore = await readStore();
+  const freshCustomer = findCustomerById(freshStore, customerId);
+  sendJson(response, 200, sanitizeCustomerForPortal(freshStore, freshCustomer));
+}
+
 async function handleUploadLibraryFile(request, response) {
   const session = await requireAuthenticatedUser(request, response);
   if (!session) {
@@ -1792,6 +1858,12 @@ async function routeRequest(request, response) {
   const clearDevicesMatch = pathname.match(/^\/api\/admin\/customers\/([^/]+)\/clear-devices$/);
   if (request.method === "POST" && clearDevicesMatch) {
     await handleClearDevices(request, response, clearDevicesMatch[1]);
+    return;
+  }
+
+  const setManagerMatch = pathname.match(/^\/api\/admin\/customers\/([^/]+)\/manager$/);
+  if (request.method === "POST" && setManagerMatch) {
+    await handleSetCustomerManager(request, response, setManagerMatch[1]);
     return;
   }
 

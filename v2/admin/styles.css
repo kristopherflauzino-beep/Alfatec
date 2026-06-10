@@ -40,6 +40,27 @@ body {
   color: var(--ink);
 }
 
+body.portal-mode .masthead {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0.15rem;
+}
+
+body.portal-mode .hero-copy {
+  display: none;
+}
+
+body.portal-mode .status-stack {
+  justify-items: end;
+}
+
+body.portal-mode .status-panel {
+  width: min(100%, 420px);
+}
+
+body.portal-mode .control-meta {
+  display: none;
+}
+
 button,
 input,
 textarea,
@@ -283,6 +304,10 @@ code {
   align-items: stretch;
 }
 
+.compact-entry-grid {
+  grid-template-columns: minmax(320px, 560px);
+}
+
 .panel {
   padding: 1.1rem;
 }
@@ -457,6 +482,32 @@ code {
 
 .portal {
   margin-top: 0.85rem;
+}
+
+.portal-menu-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  padding: 0.8rem;
+}
+
+.portal-menu-button {
+  min-height: 48px;
+  padding-inline: 1rem;
+  border-radius: 999px;
+}
+
+.portal-menu-button-active {
+  background: linear-gradient(135deg, var(--brand), #19bbff) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 14px 24px rgba(20, 118, 242, 0.2) !important;
+}
+
+.portal-view-stack,
+.portal-view {
+  display: grid;
+  gap: 1rem;
 }
 
 .portal-shell {
@@ -697,6 +748,10 @@ code {
   gap: 1rem;
 }
 
+.compact-secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .detail-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -727,6 +782,14 @@ code {
   font-size: 1rem;
 }
 
+.summary-card-wide {
+  min-height: auto;
+}
+
+.summary-card-wide strong {
+  line-height: 1.5;
+}
+
 .settings-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -753,6 +816,34 @@ code {
 
 .detail-panel .stack {
   gap: 1rem;
+}
+
+.subscription-panel,
+.manager-switch-panel {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.manager-switch-panel {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(237, 245, 255, 0.72);
+}
+
+.manager-switch-panel button {
+  min-height: 54px;
+}
+
+.portal-inline-note {
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .device-panel,
@@ -914,6 +1005,10 @@ code {
   line-height: 1.4;
 }
 
+.customer-card-status {
+  text-transform: none;
+}
+
 .customer-card-status,
 .pill {
   display: inline-flex;
@@ -1069,6 +1164,10 @@ code {
   .login-layout {
     grid-template-columns: 1fr;
   }
+
+  .compact-entry-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 820px) {
@@ -1118,6 +1217,7 @@ code {
   .detail-grid,
   .detail-facts,
   .detail-secondary,
+  .compact-secondary,
   .settings-summary,
   .support-grid,
   .file-upload-form,
@@ -1131,5 +1231,9 @@ code {
 
   .customer-head {
     flex-direction: column;
+  }
+
+  .manager-switch-panel {
+    grid-template-columns: 1fr;
   }
 }

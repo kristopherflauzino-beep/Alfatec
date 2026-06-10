@@ -5,6 +5,7 @@ const state = {
   selectedCustomerId: "",
   searchQuery: "",
   statusFilter: "all",
+  portalView: "overview",
 };
 
 const REMOTE_API_BASE_URL = "https://alfatec-api.vercel.app";
@@ -34,10 +35,17 @@ const elements = {
   metricDevices: document.getElementById("metric-devices"),
   metricRevenue: document.getElementById("metric-revenue"),
   metricStudents: document.getElementById("metric-due-soon"),
+  portalMenuBar: document.getElementById("portal-menu-bar"),
   resultsCount: document.getElementById("results-count"),
   customersList: document.getElementById("customers-list"),
   detailTitle: document.getElementById("detail-title"),
   detailEmpty: document.getElementById("detail-empty"),
+  overviewContent: document.getElementById("overview-content"),
+  overviewManagerEmail: document.getElementById("overview-manager-email"),
+  overviewNotes: document.getElementById("overview-notes"),
+  overviewBlockedReason: document.getElementById("overview-blocked-reason"),
+  subscriptionTitle: document.getElementById("subscription-title"),
+  subscriptionEmpty: document.getElementById("subscription-empty"),
   detailForm: document.getElementById("detail-form"),
   detailName: document.getElementById("detail-name"),
   detailEmail: document.getElementById("detail-email"),
@@ -54,18 +62,20 @@ const elements = {
   detailDeviceUsage: document.getElementById("detail-device-usage"),
   detailPricePerDevice: document.getElementById("detail-price-per-device"),
   detailCurrentValue: document.getElementById("detail-current-value"),
+  subscriptionStatusPreview: document.getElementById("subscription-status-preview"),
+  subscriptionExpiryPreview: document.getElementById("subscription-expiry-preview"),
+  subscriptionPlanPreview: document.getElementById("subscription-plan-preview"),
   detailDevicesList: document.getElementById("detail-devices-list"),
-  fileUploadForm: document.getElementById("file-upload-form"),
-  fileUploadButton: document.getElementById("file-upload-button"),
-  fileCategory: document.getElementById("file-category"),
-  fileTitle: document.getElementById("file-title"),
-  fileInput: document.getElementById("file-input"),
-  fileDescription: document.getElementById("file-description"),
-  libraryFilesList: document.getElementById("library-files-list"),
+  saveCustomerButton: document.getElementById("save-customer-button"),
   copySelectedEmailButton: document.getElementById("copy-selected-email-button"),
   extendCustomerButton: document.getElementById("extend-customer-button"),
+  cancelSubscriptionButton: document.getElementById("cancel-subscription-button"),
+  reactivateSubscriptionButton: document.getElementById("reactivate-subscription-button"),
   resetPasswordButton: document.getElementById("reset-password-button"),
   clearDevicesButton: document.getElementById("clear-devices-button"),
+  managerSwitchPanel: document.getElementById("manager-switch-panel"),
+  managerUserSelect: document.getElementById("manager-user-select"),
+  setManagerButton: document.getElementById("set-manager-button"),
   managerUsersList: document.getElementById("manager-users-list"),
   teacherUsersList: document.getElementById("teacher-users-list"),
   teacherUserForm: document.getElementById("teacher-user-form"),
@@ -290,6 +300,29 @@ function buildStatusLabel(customer) {
   return customer.reason || "Sem observacoes";
 }
 
+function formatCustomerStatus(status) {
+  if (status === "active") {
+    return "Ativa";
+  }
+  if (status === "blocked") {
+    return "Bloqueada";
+  }
+  if (status === "expired") {
+    return "Expirada";
+  }
+  return "Indefinida";
+}
+
+function formatUserRole(role) {
+  if (role === "customer_manager") {
+    return "Gerente";
+  }
+  if (role === "teacher") {
+    return "Professor";
+  }
+  return "Sem usuario";
+}
+
 function matchesFilter(customer) {
   if (state.statusFilter === "all") {
     return true;
@@ -317,8 +350,29 @@ function getFilteredCustomers() {
   return getAllCustomers().filter((customer) => matchesFilter(customer) && matchesSearch(customer));
 }
 
+function getVisiblePortalViews() {
+  return isAdminViewer() ? ["overview", "subscription", "users", "admin", "audit"] : ["overview", "subscription", "users", "audit"];
+}
+
+function setPortalView(view) {
+  const allowedViews = getVisiblePortalViews();
+  const nextView = allowedViews.includes(view) ? view : allowedViews[0];
+  state.portalView = nextView;
+
+  document.querySelectorAll("[data-portal-view]").forEach((button) => {
+    const isActive = button.dataset.portalView === nextView;
+    button.classList.toggle("portal-menu-button-active", isActive);
+  });
+
+  document.querySelectorAll(".portal-view").forEach((panel) => {
+    const shouldShow = panel.id === `portal-view-${nextView}`;
+    panel.classList.toggle("hidden", !shouldShow);
+  });
+}
+
 function renderShellVisibility() {
   const loggedIn = Boolean(state.token);
+  document.body.classList.toggle("portal-mode", loggedIn);
   elements.entryPanel.classList.toggle("hidden", loggedIn);
   elements.portal.classList.toggle("hidden", !loggedIn);
   elements.logoutButton.classList.toggle("hidden", !loggedIn);
@@ -334,8 +388,7 @@ function updateHeader(health) {
     return;
   }
 
-  const urls = Array.isArray(health.networkUrls) && health.networkUrls.length ? ` | Rede: ${health.networkUrls[0]}` : "";
-  elements.healthStatus.textContent = `Online${urls}`;
+  elements.healthStatus.textContent = "Online";
 }
 
 function renderMetrics(metrics) {
@@ -361,21 +414,45 @@ function renderCustomerList() {
       const selectedClass = customer.id === state.selectedCustomerId ? " customer-card-active" : "";
       return `
         <button class="customer-card${selectedClass}" type="button" data-customer-id="${escapeHtml(customer.id)}">
-          <span class="customer-card-status customer-status-${escapeHtml(customer.status)}">${escapeHtml(customer.status)}</span>
+          <span class="customer-card-status customer-status-${escapeHtml(customer.status)}">${escapeHtml(formatCustomerStatus(customer.status))}</span>
           <strong>${escapeHtml(customer.customerName)}</strong>
           <span>${escapeHtml(customer.email)}</span>
-          <span>${escapeHtml(customer.planName || "Plano")}</span>
-          <span>${escapeHtml(`Dispositivos ${customer.usage.totalManagedUsers || 0}/${customer.deviceCount} | Alunos ${customer.usage.totalStudents}`)}</span>
+          <span>${escapeHtml(`${customer.planName || "Plano"} | ${customer.usage.totalManagedUsers || 0}/${customer.deviceCount} usuarios`)}</span>
         </button>
       `;
     })
     .join("");
 }
 
+function renderManagerSelector(customer) {
+  if (!isAdminViewer() || !customer) {
+    elements.managerSwitchPanel.classList.add("hidden");
+    elements.managerUserSelect.innerHTML = "";
+    return;
+  }
+
+  const managerOptions = [...(customer.managerUsers || []), ...(customer.teacherUsers || [])];
+  if (!managerOptions.length) {
+    elements.managerSwitchPanel.classList.add("hidden");
+    elements.managerUserSelect.innerHTML = "";
+    return;
+  }
+
+  const currentManagerId = customer.managerUsers?.[0]?.id || "";
+  elements.managerUserSelect.innerHTML = managerOptions
+    .map((user) => {
+      const roleLabel = user.role === "customer_manager" ? "Gerente atual" : "Professor";
+      return `<option value="${escapeHtml(user.id)}" ${user.id === currentManagerId ? "selected" : ""}>${escapeHtml(`${user.displayName} - ${user.email} (${roleLabel})`)}</option>`;
+    })
+    .join("");
+
+  elements.managerSwitchPanel.classList.remove("hidden");
+}
+
 function renderManagers(customer) {
   const managers = customer.managerUsers || [];
   if (!managers.length) {
-    elements.managerUsersList.innerHTML = `<div class="empty-state compact-empty"><strong>Sem gerente cadastrado.</strong><p>Esse cliente ainda nao tem uma conta principal.</p></div>`;
+    elements.managerUsersList.innerHTML = `<div class="empty-state compact-empty"><strong>Sem gerente cadastrado.</strong></div>`;
     return;
   }
 
@@ -385,10 +462,9 @@ function renderManagers(customer) {
         <article class="user-card user-card-manager">
           <div class="user-card-head">
             <div>
-              <p class="section-kicker">Cliente gerente</p>
               <h3>${escapeHtml(user.displayName)}</h3>
             </div>
-            <span class="pill">${escapeHtml(user.status)}</span>
+            <span class="pill">Gerente</span>
           </div>
           <div class="user-meta-grid">
             <div><span>Email</span><strong>${escapeHtml(user.email)}</strong></div>
@@ -407,13 +483,13 @@ function renderManagers(customer) {
 
 function renderTeacherUsers(customer) {
   const teacherUsers = customer.teacherUsers || [];
+  const canDeleteUsers = isAdminViewer();
   elements.teacherLimitNote.textContent =
-    `Total em uso: ${customer.usage.totalManagedUsers || 0}/${customer.deviceCount}. ` +
-    `A secretaria ocupa 1 vaga e os demais usuarios usam as restantes. Espacos livres: ${customer.usage.teacherSlotsAvailable}.`;
+    `Em uso: ${customer.usage.totalManagedUsers || 0}/${customer.deviceCount}. Livres: ${customer.usage.teacherSlotsAvailable}.`;
 
   if (!teacherUsers.length) {
     elements.teacherUsersList.innerHTML =
-      `<div class="empty-state compact-empty"><strong>Nenhum professor cadastrado.</strong><p>Crie o primeiro usuario de professor para esse cliente.</p></div>`;
+      `<div class="empty-state compact-empty"><strong>Nenhum professor cadastrado.</strong></div>`;
     return;
   }
 
@@ -423,10 +499,9 @@ function renderTeacherUsers(customer) {
         <form class="user-card user-card-form" data-user-id="${escapeHtml(user.id)}">
           <div class="user-card-head">
             <div>
-              <p class="section-kicker">Professor</p>
               <h3>${escapeHtml(user.displayName)}</h3>
             </div>
-            <span class="pill">${escapeHtml(user.status)}</span>
+            <span class="pill">${escapeHtml(user.status === "active" ? "Ativo" : "Inativo")}</span>
           </div>
 
           <div class="inline-grid">
@@ -463,7 +538,9 @@ function renderTeacherUsers(customer) {
           <div class="action-cluster">
             <button type="submit">Salvar usuario</button>
             <button class="ghost" type="button" data-action="clear-device" data-user-id="${escapeHtml(user.id)}">Limpar dispositivo</button>
-            <button class="ghost" type="button" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Remover usuario</button>
+            ${canDeleteUsers
+              ? `<button class="ghost" type="button" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Remover usuario</button>`
+              : ""}
           </div>
         </form>
       `
@@ -486,10 +563,9 @@ function renderDevices(customer) {
         <article class="device-card">
           <div class="device-card-head">
             <div>
-              <p class="section-kicker">Dispositivo</p>
               <h3>${escapeHtml(device.deviceLabel || device.deviceId)}</h3>
             </div>
-            <span class="pill info">${escapeHtml(device.userRole || "sem usuario")}</span>
+            <span class="pill info">${escapeHtml(formatUserRole(device.userRole))}</span>
           </div>
           <div class="user-meta-grid">
             <div><span>ID do dispositivo</span><strong>${escapeHtml(device.deviceId || "-")}</strong></div>
@@ -500,42 +576,6 @@ function renderDevices(customer) {
             <div><span>Ultimo login</span><strong>${escapeHtml(formatDate(device.lastLoginAt))}</strong></div>
           </div>
           <p class="helper-copy">Ultima presenca do app: ${escapeHtml(formatDate(device.lastSeenAt || device.lastSyncAt))}</p>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderLibraryFiles(customer) {
-  const files = customer.files || [];
-
-  if (!files.length) {
-    elements.libraryFilesList.innerHTML =
-      `<div class="empty-state compact-empty"><strong>Nenhum arquivo enviado.</strong><p>Envie aplicativos, documentos ou logs para liberar o download aos usuarios deste cliente.</p></div>`;
-    return;
-  }
-
-  elements.libraryFilesList.innerHTML = files
-    .map(
-      (file) => `
-        <article class="library-card">
-          <div class="library-card-head">
-            <div>
-              <p class="section-kicker">${escapeHtml(formatFileCategory(file.category))}</p>
-              <h3>${escapeHtml(file.title || file.originalName)}</h3>
-            </div>
-            <span class="pill info">${escapeHtml(formatBytes(file.size))}</span>
-          </div>
-          <p class="library-description">${escapeHtml(file.description || file.originalName)}</p>
-          <div class="user-meta-grid">
-            <div><span>Enviado por</span><strong>${escapeHtml(file.uploadedByName || file.uploadedByEmail || "-")}</strong></div>
-            <div><span>Data</span><strong>${escapeHtml(formatDate(file.createdAt))}</strong></div>
-            <div><span>Arquivo original</span><strong>${escapeHtml(file.originalName || "-")}</strong></div>
-          </div>
-          <div class="action-cluster">
-            <button type="button" data-file-action="download" data-file-id="${escapeHtml(file.id)}">Baixar</button>
-            <button class="ghost" type="button" data-file-action="delete" data-file-id="${escapeHtml(file.id)}">Remover</button>
-          </div>
         </article>
       `
     )
@@ -554,10 +594,14 @@ function setDetailEditable(enabled) {
     elements.detailBlocked,
     elements.detailBlockedReason,
     elements.detailPassword,
+    elements.saveCustomerButton,
     elements.extendCustomerButton,
+    elements.cancelSubscriptionButton,
+    elements.reactivateSubscriptionButton,
     elements.resetPasswordButton,
+    elements.clearDevicesButton,
   ].forEach((element) => {
-    if ("disabled" in element) {
+    if (element && "disabled" in element) {
       element.disabled = !enabled;
     }
   });
@@ -567,21 +611,33 @@ function renderDetail() {
   const customer = getSelectedCustomer();
   if (!customer) {
     elements.detailTitle.textContent = "Selecione um cliente";
+    elements.subscriptionTitle.textContent = "Assinatura";
     elements.detailEmpty.classList.remove("hidden");
+    elements.overviewContent.classList.add("hidden");
+    elements.subscriptionEmpty.classList.remove("hidden");
     elements.detailForm.classList.add("hidden");
     elements.copySelectedEmailButton.classList.add("hidden");
+    elements.managerSwitchPanel.classList.add("hidden");
     elements.managerUsersList.innerHTML = "";
     elements.teacherUsersList.innerHTML = "";
     elements.teacherLimitNote.textContent = "Escolha um cliente para criar usuarios de professor.";
     elements.detailDevicesList.innerHTML = "";
-    elements.libraryFilesList.innerHTML = "";
+    elements.overviewManagerEmail.textContent = "-";
+    elements.overviewNotes.textContent = "-";
+    elements.overviewBlockedReason.textContent = "-";
+    elements.subscriptionStatusPreview.textContent = "-";
+    elements.subscriptionExpiryPreview.textContent = "-";
+    elements.subscriptionPlanPreview.textContent = "-";
     return;
   }
 
   elements.detailEmpty.classList.add("hidden");
+  elements.overviewContent.classList.remove("hidden");
+  elements.subscriptionEmpty.classList.add("hidden");
   elements.detailForm.classList.remove("hidden");
   elements.copySelectedEmailButton.classList.remove("hidden");
   elements.detailTitle.textContent = customer.customerName;
+  elements.subscriptionTitle.textContent = `Assinatura de ${customer.customerName}`;
 
   elements.detailName.value = customer.customerName || "";
   elements.detailEmail.value = customer.email || "";
@@ -593,16 +649,24 @@ function renderDetail() {
   elements.detailBlocked.checked = Boolean(customer.blockedReason || customer.status === "blocked");
   elements.detailBlockedReason.value = customer.blockedReason || "";
   elements.detailPassword.value = "";
-  elements.detailStatus.textContent = buildStatusLabel(customer);
-  elements.detailContractedDevices.textContent = `${customer.usage.teacherSlotsUsed}/${customer.deviceCount}`;
+  elements.detailStatus.textContent = formatCustomerStatus(customer.status);
+  elements.detailContractedDevices.textContent = `${customer.usage.totalManagedUsers || 0}/${customer.deviceCount}`;
   elements.detailDeviceUsage.textContent = `${customer.devicesInUse || 0}`;
   elements.detailPricePerDevice.textContent = formatCurrency(customer.pricePerDevice);
   elements.detailCurrentValue.textContent = formatCurrency(customer.currentValue);
+  elements.overviewManagerEmail.textContent = customer.managerUsers?.[0]?.email || "-";
+  elements.overviewNotes.textContent = customer.notes || "Sem observacoes.";
+  elements.overviewBlockedReason.textContent = customer.blockedReason || "Sem bloqueio.";
+  elements.subscriptionStatusPreview.textContent = formatCustomerStatus(customer.status);
+  elements.subscriptionExpiryPreview.textContent = formatDateOnly(customer.expiresAt) || "-";
+  elements.subscriptionPlanPreview.textContent = customer.planName || "-";
+  elements.reactivateSubscriptionButton.classList.toggle("hidden", customer.status !== "blocked");
+  elements.cancelSubscriptionButton.classList.toggle("hidden", customer.status === "blocked");
 
+  renderManagerSelector(customer);
   renderManagers(customer);
   renderTeacherUsers(customer);
   renderDevices(customer);
-  renderLibraryFiles(customer);
   setDetailEditable(isAdminViewer());
 }
 
@@ -630,19 +694,23 @@ function applyRoleVisibility() {
   const isAdmin = viewer?.role === "admin";
 
   elements.adminEmailDisplay.textContent = viewer?.email || "-";
-  elements.viewerRoleDisplay.textContent = isAdmin ? "Administrador" : "Cliente gerente";
+  elements.viewerRoleDisplay.textContent = isAdmin ? "Administrador" : "Gerente";
 
-  const adminSettingsPanel = elements.adminSettingsForm.closest(".settings-panel");
-  if (adminSettingsPanel) {
-    elements.adminSettingsForm.classList.toggle("hidden", !isAdmin);
-    elements.customerForm.classList.toggle("hidden", !isAdmin);
-  }
+  elements.adminSettingsForm.classList.toggle("hidden", !isAdmin);
+  elements.customerForm.classList.toggle("hidden", !isAdmin);
 
   elements.teacherUserForm.classList.toggle("hidden", !isAdmin);
+  elements.managerSwitchPanel.classList.toggle("hidden", !isAdmin || !getSelectedCustomer());
 
   elements.detailBlocked.disabled = !isAdmin;
   elements.detailBlockedReason.disabled = !isAdmin;
   elements.detailEmail.disabled = !isAdmin;
+
+  document.querySelector('[data-portal-view="admin"]')?.classList.toggle("hidden", !isAdmin);
+  if (!getVisiblePortalViews().includes(state.portalView)) {
+    state.portalView = "overview";
+  }
+  setPortalView(state.portalView);
 }
 
 function renderOverview(overview) {
@@ -655,10 +723,11 @@ function renderOverview(overview) {
   elements.dataFile.textContent = overview.dataFile || "-";
   elements.sessionStatus.textContent = `${overview.viewer.displayName || overview.viewer.email} (${overview.viewer.role})`;
   renderMetrics(overview.metrics);
+  applyRoleVisibility();
   renderCustomerList();
   renderDetail();
   renderAudit(overview.audit || []);
-  applyRoleVisibility();
+  setPortalView(state.portalView);
 }
 
 async function refreshOverview() {
@@ -692,6 +761,7 @@ function logout() {
   state.overview = null;
   state.currentUser = null;
   state.selectedCustomerId = "";
+  state.portalView = "overview";
   renderShellVisibility();
   elements.sessionStatus.textContent = "Aguardando login";
   elements.customersList.innerHTML = "";
@@ -700,6 +770,9 @@ function logout() {
   elements.teacherUsersList.innerHTML = "";
   elements.teacherLimitNote.textContent = "";
   elements.loginPassword.value = "";
+  elements.portalMenuBar.querySelectorAll("[data-portal-view]").forEach((button) => {
+    button.classList.remove("portal-menu-button-active");
+  });
   showToast("Sessao encerrada.");
 }
 
@@ -752,6 +825,43 @@ async function handleExtendCustomer() {
   await refreshOverview();
 }
 
+async function handleCancelSubscription() {
+  const customer = getSelectedCustomer();
+  if (!customer || !isAdminViewer()) {
+    showToast("Somente o admin pode cancelar a assinatura.");
+    return;
+  }
+
+  await api(`/api/admin/customers/${customer.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      blocked: true,
+      blockedReason: elements.detailBlockedReason.value.trim() || "Assinatura cancelada",
+    }),
+  });
+  showToast("Assinatura cancelada.");
+  await refreshOverview();
+}
+
+async function handleReactivateSubscription() {
+  const customer = getSelectedCustomer();
+  if (!customer || !isAdminViewer()) {
+    showToast("Somente o admin pode reativar a assinatura.");
+    return;
+  }
+
+  await api(`/api/admin/customers/${customer.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      blocked: false,
+      blockedReason: "",
+      expiresAt: toEndOfDayIso(elements.detailExpiry.value || nextMonthDate()),
+    }),
+  });
+  showToast("Assinatura reativada.");
+  await refreshOverview();
+}
+
 async function handleResetManagerPassword() {
   const customer = getSelectedCustomer();
   if (!customer || !isAdminViewer()) {
@@ -783,6 +893,26 @@ async function handleClearDevices() {
     method: "POST",
   });
   showToast("Todos os dispositivos desse cliente foram limpos.");
+  await refreshOverview();
+}
+
+async function handleSetManager() {
+  const customer = getSelectedCustomer();
+  if (!customer || !isAdminViewer()) {
+    showToast("Somente o admin pode definir o gerente.");
+    return;
+  }
+
+  const userId = elements.managerUserSelect.value;
+  if (!userId) {
+    throw new Error("Selecione qual usuario sera o gerente.");
+  }
+
+  await api(`/api/admin/customers/${customer.id}/manager`, {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+  showToast("Gerente atualizado.");
   await refreshOverview();
 }
 
@@ -896,78 +1026,6 @@ async function handleTeacherCardClick(event) {
   }
 }
 
-async function handleUploadFile() {
-  const customer = getSelectedCustomer();
-  const file = elements.fileInput.files[0];
-  if (!customer) {
-    throw new Error("Selecione um cliente antes de enviar arquivos.");
-  }
-  if (!file) {
-    throw new Error("Escolha um arquivo para enviar.");
-  }
-
-  const formData = new FormData();
-  formData.append("customerId", customer.id);
-  formData.append("category", elements.fileCategory.value);
-  formData.append("title", elements.fileTitle.value || file.name);
-  formData.append("description", elements.fileDescription.value);
-  formData.append("file", file);
-
-  await apiForm("/api/files", formData);
-  elements.fileTitle.value = "";
-  elements.fileDescription.value = "";
-  elements.fileInput.value = "";
-  showToast("Arquivo enviado.");
-  await refreshOverview();
-}
-
-async function downloadFile(fileId) {
-  const response = await fetch(`/api/files/${fileId}/download`, {
-    headers: {
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Nao foi possivel baixar o arquivo.");
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename="([^"]+)"/);
-  const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : "arquivo";
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function handleLibraryClick(event) {
-  const button = event.target.closest("[data-file-action]");
-  if (!button) {
-    return;
-  }
-
-  const fileId = button.dataset.fileId;
-  if (button.dataset.fileAction === "download") {
-    await downloadFile(fileId);
-    return;
-  }
-
-  if (button.dataset.fileAction === "delete") {
-    await api(`/api/files/${fileId}`, {
-      method: "DELETE",
-    });
-    showToast("Arquivo removido.");
-    await refreshOverview();
-  }
-}
-
 async function handleAdminPasswordChange(event) {
   event.preventDefault();
   if (!isAdminViewer()) {
@@ -1033,6 +1091,13 @@ elements.headerRefreshButton.addEventListener("click", () => {
 });
 
 elements.logoutButton.addEventListener("click", logout);
+elements.portalMenuBar.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-portal-view]");
+  if (!button) {
+    return;
+  }
+  setPortalView(button.dataset.portalView);
+});
 elements.customerSearch.addEventListener("input", (event) => {
   state.searchQuery = normalizeText(event.target.value);
   renderCustomerList();
@@ -1056,6 +1121,12 @@ elements.detailForm.addEventListener("submit", (event) => {
 elements.extendCustomerButton.addEventListener("click", () => {
   handleExtendCustomer().catch((error) => showToast(error.message || "Nao foi possivel prorrogar."));
 });
+elements.cancelSubscriptionButton.addEventListener("click", () => {
+  handleCancelSubscription().catch((error) => showToast(error.message || "Nao foi possivel cancelar a assinatura."));
+});
+elements.reactivateSubscriptionButton.addEventListener("click", () => {
+  handleReactivateSubscription().catch((error) => showToast(error.message || "Nao foi possivel reativar a assinatura."));
+});
 elements.resetPasswordButton.addEventListener("click", () => {
   handleResetManagerPassword().catch((error) => showToast(error.message || "Nao foi possivel redefinir a senha."));
 });
@@ -1071,17 +1142,14 @@ elements.customerForm.addEventListener("submit", (event) => {
 elements.teacherUserForm.addEventListener("submit", (event) => {
   handleCreateTeacher(event).catch((error) => showToast(error.message || "Nao foi possivel criar o usuario."));
 });
+elements.setManagerButton.addEventListener("click", () => {
+  handleSetManager().catch((error) => showToast(error.message || "Nao foi possivel trocar o gerente."));
+});
 elements.teacherUsersList.addEventListener("submit", (event) => {
   handleTeacherCardSubmit(event).catch((error) => showToast(error.message || "Nao foi possivel salvar o usuario."));
 });
 elements.teacherUsersList.addEventListener("click", (event) => {
   handleTeacherCardClick(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar o usuario."));
-});
-elements.fileUploadButton.addEventListener("click", () => {
-  handleUploadFile().catch((error) => showToast(error.message || "Nao foi possivel enviar o arquivo."));
-});
-elements.libraryFilesList.addEventListener("click", (event) => {
-  handleLibraryClick(event).catch((error) => showToast(error.message || "Nao foi possivel concluir a acao."));
 });
 elements.adminSettingsForm.addEventListener("submit", (event) => {
   handleAdminPasswordChange(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar a senha."));
