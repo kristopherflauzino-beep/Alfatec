@@ -315,3 +315,22 @@ export async function syncClientUsage({ apiUrl, token, deviceId, deviceLabel, st
     }),
   });
 }
+
+export async function changeOwnPassword({ apiUrl, token, currentPassword, newPassword }) {
+  const normalizedApiUrl = normalizeApiUrl(apiUrl);
+  if (!normalizedApiUrl) {
+    throw buildError("Nenhum servidor publico foi configurado para esta versao do app.");
+  }
+
+  return requestJson(`${normalizedApiUrl}/api/auth/change-password`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      currentPassword,
+      newPassword,
+    }),
+  });
+}

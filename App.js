@@ -42,16 +42,19 @@ const PDF_REPORT_LOGO_SIZE = {
   width: 900,
   height: 685,
 };
+const APP_PLACEHOLDER_COLOR = "#7c96b2";
 
-export default function App({ sessionContext = null, cloudSync = null } = {}) {
+export default function App({ sessionContext = null, cloudSync = null, onChangePassword = null } = {}) {
   const [appData, setAppData] = useState(createInitialData());
   const [currentScreen, setCurrentScreen] = useState("classes");
   const [studentForm, setStudentForm] = useState(createEmptyStudentForm());
   const [editStudentForm, setEditStudentForm] = useState(createEmptyEditStudentForm());
+  const [passwordChangeForm, setPasswordChangeForm] = useState(createEmptyPasswordChangeForm());
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [classNameDraft, setClassNameDraft] = useState("Turma 1");
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [saveStatus, setSaveStatus] = useState({
     label: "Carregando dados do aparelho...",
     lastSavedAt: null,
@@ -246,7 +249,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color="#C45D2E" />
+        <ActivityIndicator size="large" color="#3B82F6" />
         <Text style={styles.loadingTitle}>Preparando o app de chamada</Text>
         <Text style={styles.loadingText}>Carregando turmas, alunos e relatorios salvos no aparelho.</Text>
       </SafeAreaView>
@@ -272,7 +275,6 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
             <View style={styles.heroHeaderRow}>
               <View style={styles.heroTextColumn}>
                 <Text style={styles.eyebrow}>App de Chamada</Text>
-                <Text style={styles.heroTitle}>Controle turmas, frequencia, notas e observacoes em um so lugar.</Text>
                 <Text style={styles.heroText}>{formatLiveDate(now)}</Text>
                 <Text style={styles.heroMeta}>
                   {saveStatus.label}
@@ -306,9 +308,6 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
               <View style={styles.sectionCard}>
                 <Text style={styles.sectionLabel}>Selecao de turmas</Text>
                 <Text style={styles.sectionTitle}>Escolha ou crie novas turmas</Text>
-                <Text style={styles.sectionText}>
-                  O professor pode renomear as turmas, adicionar quantas precisar e cada alteracao fica salva automaticamente.
-                </Text>
 
                 <View style={styles.classSelectorRow}>
                   {appData.classes.map((classItem) => (
@@ -377,7 +376,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                   value={classNameDraft}
                   onChangeText={setClassNameDraft}
                   placeholder="Digite o nome da turma"
-                  placeholderTextColor="#8D7D72"
+                  placeholderTextColor={APP_PLACEHOLDER_COLOR}
                   style={styles.input}
                 />
 
@@ -403,7 +402,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                     value={studentForm.name}
                     onChangeText={(value) => updateStudentForm("name", value)}
                     placeholder="Ex.: Ana Souza"
-                    placeholderTextColor="#8D7D72"
+                    placeholderTextColor={APP_PLACEHOLDER_COLOR}
                     style={styles.input}
                   />
                 </View>
@@ -414,7 +413,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                     value={studentForm.gradeLevel}
                     onChangeText={(value) => updateStudentForm("gradeLevel", value)}
                     placeholder="Ex.: 8o ano"
-                    placeholderTextColor="#8D7D72"
+                    placeholderTextColor={APP_PLACEHOLDER_COLOR}
                     style={styles.input}
                   />
                 </View>
@@ -427,7 +426,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                         value={studentForm[field.key]}
                         onChangeText={(value) => updateStudentForm(field.key, value)}
                         placeholder="0,0"
-                        placeholderTextColor="#8D7D72"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
                         keyboardType="numeric"
                         style={styles.input}
                       />
@@ -441,7 +440,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                     value={studentForm.observations}
                     onChangeText={(value) => updateStudentForm("observations", value)}
                     placeholder="Ex.: precisa reforcar matematica, participa bem da aula..."
-                    placeholderTextColor="#8D7D72"
+                    placeholderTextColor={APP_PLACEHOLDER_COLOR}
                     multiline
                     textAlignVertical="top"
                     style={[styles.input, styles.textArea]}
@@ -474,7 +473,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                       value={editStudentForm.name}
                       onChangeText={(value) => updateEditStudentForm("name", value)}
                       placeholder="Ex.: Ana Souza"
-                      placeholderTextColor="#8D7D72"
+                      placeholderTextColor={APP_PLACEHOLDER_COLOR}
                       style={styles.input}
                     />
                   </View>
@@ -485,7 +484,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                       value={editStudentForm.gradeLevel}
                       onChangeText={(value) => updateEditStudentForm("gradeLevel", value)}
                       placeholder="Ex.: 8o ano"
-                      placeholderTextColor="#8D7D72"
+                      placeholderTextColor={APP_PLACEHOLDER_COLOR}
                       style={styles.input}
                     />
                   </View>
@@ -497,7 +496,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                         value={editStudentForm.presences}
                         onChangeText={(value) => updateEditStudentForm("presences", value)}
                         placeholder="0"
-                        placeholderTextColor="#8D7D72"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
                         keyboardType="number-pad"
                         style={styles.input}
                       />
@@ -509,7 +508,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                         value={editStudentForm.absences}
                         onChangeText={(value) => updateEditStudentForm("absences", value)}
                         placeholder="0"
-                        placeholderTextColor="#8D7D72"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
                         keyboardType="number-pad"
                         style={styles.input}
                       />
@@ -524,7 +523,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                           value={editStudentForm[field.key]}
                           onChangeText={(value) => updateEditStudentForm(field.key, value)}
                           placeholder="0,0"
-                          placeholderTextColor="#8D7D72"
+                          placeholderTextColor={APP_PLACEHOLDER_COLOR}
                           keyboardType="numeric"
                           style={styles.input}
                         />
@@ -538,7 +537,7 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                       value={editStudentForm.observations}
                       onChangeText={(value) => updateEditStudentForm("observations", value)}
                       placeholder="Ex.: precisa reforcar matematica, participa bem da aula..."
-                      placeholderTextColor="#8D7D72"
+                      placeholderTextColor={APP_PLACEHOLDER_COLOR}
                       multiline
                       textAlignVertical="top"
                       style={[styles.input, styles.textArea]}
@@ -719,6 +718,65 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
                 />
               </View>
 
+              {onChangePassword ? (
+                <View style={styles.sectionCard}>
+                    <Text style={styles.sectionLabel}>Senha da conta</Text>
+                    <Text style={styles.sectionTitle}>Troque sua senha no mobile</Text>
+                    <Text style={styles.sectionText}>
+                      A nova senha passa a valer no proximo login deste aparelho e tambem nos outros dispositivos da conta.
+                    </Text>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.inputLabel}>Senha atual</Text>
+                      <TextInput
+                        value={passwordChangeForm.currentPassword}
+                        onChangeText={(value) => updatePasswordChangeForm("currentPassword", value)}
+                        placeholder="Digite a senha atual"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
+                        secureTextEntry
+                        style={styles.input}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.inputLabel}>Nova senha</Text>
+                      <TextInput
+                        value={passwordChangeForm.newPassword}
+                        onChangeText={(value) => updatePasswordChangeForm("newPassword", value)}
+                        placeholder="Crie uma nova senha"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
+                        secureTextEntry
+                        style={styles.input}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.inputLabel}>Confirmar nova senha</Text>
+                      <TextInput
+                        value={passwordChangeForm.confirmPassword}
+                        onChangeText={(value) => updatePasswordChangeForm("confirmPassword", value)}
+                        placeholder="Repita a nova senha"
+                        placeholderTextColor={APP_PLACEHOLDER_COLOR}
+                        secureTextEntry
+                        style={styles.input}
+                      />
+                    </View>
+
+                    <TouchableOpacity
+                      activeOpacity={0.88}
+                      onPress={handleChangePasswordSubmit}
+                      disabled={isChangingPassword}
+                      style={styles.primaryButton}
+                    >
+                      {isChangingPassword ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.primaryButtonText}>Atualizar senha</Text>
+                      )}
+                    </TouchableOpacity>
+                </View>
+              ) : null}
+
               <View style={styles.sectionCard}>
                 <Text style={styles.sectionLabel}>Reset geral</Text>
                 <Text style={styles.sectionTitle}>Apague todas as informacoes do app</Text>
@@ -762,6 +820,17 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
   function clearEditStudentForm() {
     setEditStudentForm(createEmptyEditStudentForm());
     setEditingStudentId(null);
+  }
+
+  function updatePasswordChangeForm(field, value) {
+    setPasswordChangeForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function clearPasswordChangeForm() {
+    setPasswordChangeForm(createEmptyPasswordChangeForm());
   }
 
   function handleSaveClassName() {
@@ -1048,6 +1117,43 @@ export default function App({ sessionContext = null, cloudSync = null } = {}) {
     }
   }
 
+  async function handleChangePasswordSubmit() {
+    if (!onChangePassword) {
+      return;
+    }
+
+    const currentPassword = passwordChangeForm.currentPassword.trim();
+    const newPassword = passwordChangeForm.newPassword.trim();
+    const confirmPassword = passwordChangeForm.confirmPassword.trim();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Senha", "Preencha a senha atual, a nova senha e a confirmacao.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      Alert.alert("Senha", "A nova senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Senha", "A confirmacao da nova senha nao confere.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      await onChangePassword({ currentPassword, newPassword });
+      clearPasswordChangeForm();
+      Alert.alert("Senha atualizada", "A nova senha foi salva com sucesso.");
+    } catch (error) {
+      Alert.alert("Senha", error?.message || "Nao foi possivel atualizar a senha agora.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
+
   function handleResetAll() {
     Alert.alert(
       "Reset geral",
@@ -1253,6 +1359,14 @@ function createEmptyEditStudentForm() {
     note3: "",
     note4: "",
     observations: "",
+  };
+}
+
+function createEmptyPasswordChangeForm() {
+  return {
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   };
 }
 
@@ -2246,7 +2360,7 @@ function toNumberOrNull(value) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#F4EADD",
+    backgroundColor: "#ECF6FF",
   },
   keyboardView: {
     flex: 1,
@@ -2258,7 +2372,7 @@ const styles = StyleSheet.create({
   },
   loadingScreen: {
     flex: 1,
-    backgroundColor: "#F4EADD",
+    backgroundColor: "#ECF6FF",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
@@ -2281,10 +2395,10 @@ const styles = StyleSheet.create({
     position: "relative",
     padding: 22,
     borderRadius: 26,
-    backgroundColor: "#FFF8F1",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F2D7C3",
-    shadowColor: "#A3491F",
+    borderColor: "#D8EAFD",
+    shadowColor: "#6A9DD7",
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
@@ -2303,27 +2417,28 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.5,
     fontWeight: "800",
-    color: "#A34D29",
+    color: "#3B82F6",
   },
   heroTitle: {
     marginTop: 10,
     fontSize: 24,
     lineHeight: 29,
     fontWeight: "900",
-    color: "#223341",
+    color: "#1A3E69",
   },
   heroText: {
     marginTop: 12,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#41515D",
+    fontSize: 16,
+    lineHeight: 22,
+    color: "#47698E",
+    fontWeight: "700",
     textTransform: "capitalize",
   },
   heroMeta: {
     marginTop: 10,
     fontSize: 12,
     lineHeight: 18,
-    color: "#6C655E",
+    color: "#6D86A1",
   },
   heroLogoShell: {
     position: "absolute",
@@ -2348,29 +2463,29 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 13,
     borderRadius: 18,
-    backgroundColor: "#FFF2E6",
+    backgroundColor: "#F1F8FF",
     borderWidth: 1,
-    borderColor: "#EED8C6",
+    borderColor: "#D8EAFE",
     alignItems: "center",
   },
   tabButtonActive: {
-    backgroundColor: "#C45D2E",
-    borderColor: "#C45D2E",
+    backgroundColor: "#3B82F6",
+    borderColor: "#3B82F6",
   },
   tabButtonText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#734B35",
+    color: "#4B6682",
   },
   tabButtonTextActive: {
-    color: "#FFFDFB",
+    color: "#FFFFFF",
   },
   sectionCard: {
     padding: 20,
     borderRadius: 24,
-    backgroundColor: "#FFFDF9",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EEDFD1",
+    borderColor: "#DDEEFF",
     gap: 12,
   },
   sectionLabel: {
@@ -2378,18 +2493,18 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.5,
     fontWeight: "800",
-    color: "#A34D29",
+    color: "#3B82F6",
   },
   sectionTitle: {
     fontSize: 20,
     lineHeight: 26,
     fontWeight: "800",
-    color: "#223341",
+    color: "#1A3E69",
   },
   sectionText: {
     fontSize: 15,
     lineHeight: 22,
-    color: "#5E6B74",
+    color: "#5E7A97",
   },
   classSelectorRow: {
     flexDirection: "row",
@@ -2405,21 +2520,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 16,
-    backgroundColor: "#F7EFE7",
+    backgroundColor: "#F3F9FF",
     borderWidth: 1,
-    borderColor: "#E6D5C8",
+    borderColor: "#D6E9FF",
   },
   classChipActive: {
-    backgroundColor: "#214F5D",
-    borderColor: "#214F5D",
+    backgroundColor: "#2C6FD3",
+    borderColor: "#2C6FD3",
   },
   classChipText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#654C3B",
+    color: "#466584",
   },
   classChipTextActive: {
-    color: "#FFFDFC",
+    color: "#FFFFFF",
   },
   classActionButton: {
     minHeight: 50,
@@ -2427,12 +2542,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#214F5D",
+    backgroundColor: "#2C6FD3",
   },
   classActionButtonText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FFFDFC",
+    color: "#FFFFFF",
   },
   statGrid: {
     flexDirection: "row",
@@ -2444,29 +2559,29 @@ const styles = StyleSheet.create({
     width: "48%",
     padding: 18,
     borderRadius: 22,
-    backgroundColor: "#FFF7EF",
+    backgroundColor: "#F6FAFF",
     borderWidth: 1,
-    borderColor: "#EFD9C6",
+    borderColor: "#D8EAFB",
   },
   statLabel: {
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 1.2,
     fontWeight: "800",
-    color: "#A25D3F",
+    color: "#4F82B6",
   },
   statValue: {
     marginTop: 8,
     fontSize: 24,
     lineHeight: 29,
     fontWeight: "900",
-    color: "#21313D",
+    color: "#173C64",
   },
   statHelper: {
     marginTop: 8,
     fontSize: 13,
     lineHeight: 18,
-    color: "#6A737B",
+    color: "#6C86A1",
   },
   formGroup: {
     gap: 8,
@@ -2474,18 +2589,18 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#384550",
+    color: "#42617F",
   },
   input: {
     minHeight: 50,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E3D0C0",
-    backgroundColor: "#FFF9F4",
+    borderColor: "#D7E6F5",
+    backgroundColor: "#F9FCFF",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: "#20303B",
+    color: "#173C64",
   },
   textArea: {
     minHeight: 110,
@@ -2512,12 +2627,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#C45D2E",
+    backgroundColor: "#3B82F6",
   },
   primaryButtonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FFFDFB",
+    color: "#FFFFFF",
     textAlign: "center",
   },
   secondaryButton: {
@@ -2526,12 +2641,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#E8F0F0",
+    backgroundColor: "#EAF4FF",
   },
   secondaryButtonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#214F5D",
+    color: "#2C6FD3",
   },
   dangerButton: {
     minHeight: 54,
@@ -2550,9 +2665,9 @@ const styles = StyleSheet.create({
   studentCard: {
     padding: 18,
     borderRadius: 22,
-    backgroundColor: "#FFF7EF",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EAD7C8",
+    borderColor: "#DDEBFA",
     gap: 12,
   },
   studentHeaderRow: {
@@ -2574,12 +2689,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0E1D1",
+    backgroundColor: "#E8F3FF",
   },
   studentOrderText: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#7A543C",
+    color: "#4C79A8",
   },
   studentInitialBadge: {
     width: 44,
@@ -2587,12 +2702,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#214F5D",
+    backgroundColor: "#2C6FD3",
   },
   studentInitialText: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#FFFDFC",
+    color: "#FFFFFF",
   },
   studentTitleBlock: {
     flex: 1,
@@ -2602,12 +2717,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 23,
     fontWeight: "800",
-    color: "#223341",
+    color: "#1A3E69",
   },
   studentMeta: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#5F6972",
+    color: "#607D9A",
   },
   studentPill: {
     minWidth: 72,
@@ -2616,12 +2731,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#214F5D",
+    backgroundColor: "#2C6FD3",
   },
   studentPillText: {
     fontSize: 17,
     fontWeight: "900",
-    color: "#FFFDFC",
+    color: "#FFFFFF",
   },
   badgeRow: {
     flexDirection: "row",
@@ -2650,12 +2765,12 @@ const styles = StyleSheet.create({
   studentObservation: {
     fontSize: 14,
     lineHeight: 21,
-    color: "#5A6670",
+    color: "#5D7894",
   },
   dateNote: {
     fontSize: 13,
     lineHeight: 18,
-    color: "#6D655E",
+    color: "#7A8FA7",
   },
   smallActionButton: {
     minHeight: 42,
@@ -2685,26 +2800,26 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E6D7C9",
-    backgroundColor: "#FFF8F3",
+    borderColor: "#DDEBFA",
+    backgroundColor: "#F7FBFF",
     gap: 6,
   },
   emptyStateTitle: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#2B3D48",
+    color: "#24486F",
   },
   emptyStateText: {
     fontSize: 14,
     lineHeight: 21,
-    color: "#62707A",
+    color: "#65809A",
   },
   reportCard: {
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E4D4C7",
-    backgroundColor: "#FFF8F1",
+    borderColor: "#DDEBFA",
+    backgroundColor: "#FFFFFF",
     gap: 8,
   },
   reportHeaderRow: {
@@ -2715,21 +2830,21 @@ const styles = StyleSheet.create({
   reportStudentName: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#223341",
+    color: "#1A3E69",
   },
   reportLine: {
     fontSize: 14,
     lineHeight: 21,
-    color: "#44535E",
+    color: "#56718D",
   },
   reportObservation: {
     fontSize: 14,
     lineHeight: 21,
-    color: "#4E5B65",
+    color: "#607B97",
   },
   reportStatusText: {
     fontSize: 13,
     lineHeight: 19,
-    color: "#5E6B74",
+    color: "#617D98",
   },
 });

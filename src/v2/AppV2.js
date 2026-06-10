@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import LegacyApp from "../../App";
 import {
+  changeOwnPassword,
   canUseOfflineLicense,
   clearRememberedLogin,
   clearSession,
@@ -35,6 +36,7 @@ import {
 
 const LICENSE_REFRESH_MS = 5 * 60 * 1000;
 const GATE_LOGO = require("../../assets/alfatec-logo.png");
+const V2_PLACEHOLDER_COLOR = "#7c96b2";
 
 function formatDateTime(value) {
   if (!value) {
@@ -85,22 +87,15 @@ function LoginScreen({
             <View style={styles.logoShell}>
               <Image source={GATE_LOGO} style={styles.logoImage} resizeMode="contain" />
             </View>
-            <Text style={styles.eyebrow}>V2 controlada</Text>
-            <Text style={styles.heroTitle}>APP De chamada ligado ao Controle AlfaTec</Text>
+            <Text style={styles.heroTitle}>APP De chamada</Text>
             <Text style={styles.heroText}>
-              Esta versao valida a licenca com o servidor antes de liberar a chamada. O cliente gerente cria os usuarios
-              dos professores e cada professor trabalha no proprio aparelho. Quando o servidor ficar sem contato, o app
-              ainda funciona offline por ate 10 dias.
+              O app continua funcionando por ate 10 dias offline quando ficar sem contato com a internet.
             </Text>
             {statusMessage ? <Text style={styles.statusInfo}>{statusMessage}</Text> : null}
           </View>
 
           <View style={styles.loginCard}>
             <Text style={styles.cardTitle}>Entrar</Text>
-            <Text style={styles.inputHint}>
-              Esta versao localiza automaticamente o servidor oficial do Controle AlfaTec. O usuario precisa informar
-              somente email e senha.
-            </Text>
 
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
@@ -111,7 +106,7 @@ function LoginScreen({
               keyboardType="email-address"
               style={styles.input}
               placeholder="seuemail@alfatec.com"
-              placeholderTextColor="#7f8b91"
+              placeholderTextColor={V2_PLACEHOLDER_COLOR}
             />
 
             <Text style={styles.inputLabel}>Senha</Text>
@@ -121,7 +116,7 @@ function LoginScreen({
               secureTextEntry={!passwordVisible}
               style={styles.input}
               placeholder="Digite sua senha"
-              placeholderTextColor="#7f8b91"
+              placeholderTextColor={V2_PLACEHOLDER_COLOR}
             />
             <TouchableOpacity onPress={onTogglePasswordVisibility} style={styles.passwordToggle} activeOpacity={0.86}>
               <Text style={styles.passwordToggleText}>{passwordVisible ? "Ocultar senha" : "Mostrar senha"}</Text>
@@ -138,7 +133,7 @@ function LoginScreen({
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
             <TouchableOpacity onPress={onSubmit} style={styles.primaryButton} disabled={busy}>
-              {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Entrar e validar</Text>}
+              {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Entrar</Text>}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -180,7 +175,7 @@ function LoadingScreen({ message }) {
     <SafeAreaView style={styles.gateRoot}>
       <View style={styles.centerPanel}>
         <View style={styles.loadingCard}>
-          <ActivityIndicator size="large" color="#8a4f2d" />
+          <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>{message}</Text>
         </View>
       </View>
@@ -495,6 +490,26 @@ export default function AppV2() {
     setBusy(false);
   }
 
+  async function handlePasswordChange({ currentPassword, newPassword }) {
+    if (!session?.token) {
+      throw new Error("Entre novamente para atualizar a senha.");
+    }
+
+    await changeOwnPassword({
+      apiUrl,
+      token: session.token,
+      currentPassword,
+      newPassword,
+    });
+
+    setPassword(newPassword);
+    if (rememberLogin) {
+      await persistRememberedLogin(true, apiUrl, email, newPassword, true);
+    }
+    setStatusMessage("Senha atualizada com sucesso.");
+    setErrorMessage("");
+  }
+
   if (booting) {
     return <LoadingScreen message="Preparando a V2 e restaurando a sessao..." />;
   }
@@ -537,9 +552,6 @@ export default function AppV2() {
             </Text>
           </View>
           <View style={styles.bannerActions}>
-            <TouchableOpacity onPress={handleRetry} style={styles.bannerButton}>
-              <Text style={styles.bannerButtonText}>Revalidar</Text>
-            </TouchableOpacity>
             <TouchableOpacity onPress={handleLogout} style={styles.bannerButton}>
               <Text style={styles.bannerButtonText}>Sair</Text>
             </TouchableOpacity>
@@ -567,6 +579,7 @@ export default function AppV2() {
               // O app principal continua funcionando mesmo se a telemetria falhar.
             }
           }}
+          onChangePassword={handlePasswordChange}
         />
       </View>
     </View>
@@ -576,10 +589,10 @@ export default function AppV2() {
 const styles = StyleSheet.create({
   appRoot: {
     flex: 1,
-    backgroundColor: "#f3eadf",
+    backgroundColor: "#eef7ff",
   },
   bannerSafeArea: {
-    backgroundColor: "#22313c",
+    backgroundColor: "#2c6fd3",
   },
   banner: {
     paddingHorizontal: 16,
@@ -590,10 +603,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerOnline: {
-    backgroundColor: "#1f3e4b",
+    backgroundColor: "#2c6fd3",
   },
   bannerOffline: {
-    backgroundColor: "#7d5a25",
+    backgroundColor: "#6e93c7",
   },
   bannerCopy: {
     flex: 1,
@@ -627,7 +640,7 @@ const styles = StyleSheet.create({
   },
   gateRoot: {
     flex: 1,
-    backgroundColor: "#efe4d6",
+    backgroundColor: "#eef7ff",
   },
   gateKeyboard: {
     flex: 1,
@@ -639,17 +652,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   heroCard: {
-    backgroundColor: "#24313a",
+    backgroundColor: "#ffffff",
     borderRadius: 28,
     padding: 24,
     gap: 12,
+    borderWidth: 1,
+    borderColor: "#dcecff",
   },
   logoShell: {
     alignSelf: "center",
     width: 168,
     height: 168,
     borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "#f3f9ff",
     padding: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -660,57 +675,55 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   eyebrow: {
-    color: "#f3b377",
+    color: "#3b82f6",
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 1.3,
   },
   heroTitle: {
-    color: "#fffaf4",
+    color: "#163b63",
     fontSize: 30,
     lineHeight: 34,
     fontWeight: "800",
+    textAlign: "center",
   },
   heroText: {
-    color: "#d9e4e9",
+    color: "#52708f",
     fontSize: 15,
     lineHeight: 22,
+    textAlign: "center",
   },
   loginCard: {
-    backgroundColor: "#fffdf8",
+    backgroundColor: "#ffffff",
     borderRadius: 28,
     padding: 22,
     gap: 10,
+    borderWidth: 1,
+    borderColor: "#dcecff",
   },
   cardTitle: {
-    color: "#22313c",
+    color: "#173c64",
     fontSize: 22,
     fontWeight: "800",
     marginBottom: 6,
   },
   inputLabel: {
-    color: "#5d6d77",
+    color: "#587391",
     fontWeight: "600",
     marginTop: 8,
   },
   input: {
-    backgroundColor: "#f7f0e7",
+    backgroundColor: "#f8fbff",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#ead8c8",
+    borderColor: "#d8e7f7",
     paddingHorizontal: 14,
     paddingVertical: 14,
-    color: "#22313c",
-  },
-  inputHint: {
-    color: "#6e7c84",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
+    color: "#173c64",
   },
   metaText: {
-    color: "#617179",
+    color: "#6683a1",
     fontSize: 12,
     lineHeight: 18,
     marginTop: 6,
@@ -720,7 +733,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   passwordToggleText: {
-    color: "#8a4f2d",
+    color: "#2c6fd3",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -735,14 +748,14 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#cba886",
-    backgroundColor: "#fff8f1",
+    borderColor: "#9dc3ef",
+    backgroundColor: "#f5faff",
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxChecked: {
-    backgroundColor: "#8a4f2d",
-    borderColor: "#8a4f2d",
+    backgroundColor: "#2c6fd3",
+    borderColor: "#2c6fd3",
   },
   checkboxDot: {
     width: 10,
@@ -752,13 +765,13 @@ const styles = StyleSheet.create({
   },
   rememberText: {
     flex: 1,
-    color: "#50616a",
+    color: "#557390",
     fontSize: 13,
     lineHeight: 19,
   },
   primaryButton: {
     marginTop: 12,
-    backgroundColor: "#8a4f2d",
+    backgroundColor: "#3b82f6",
     borderRadius: 18,
     paddingVertical: 16,
     alignItems: "center",
@@ -770,15 +783,15 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     marginTop: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f6fbff",
     borderRadius: 18,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#d9c8b6",
+    borderColor: "#d8e7f7",
   },
   secondaryButtonText: {
-    color: "#22313c",
+    color: "#173c64",
     fontWeight: "700",
   },
   errorText: {
@@ -786,9 +799,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   statusInfo: {
-    color: "#f7d6bc",
+    color: "#5a7a99",
     marginTop: 2,
     lineHeight: 20,
+    textAlign: "center",
   },
   centerPanel: {
     flex: 1,
@@ -796,30 +810,34 @@ const styles = StyleSheet.create({
     padding: 22,
   },
   centerCard: {
-    backgroundColor: "#24313a",
+    backgroundColor: "#ffffff",
     borderRadius: 28,
     padding: 22,
     gap: 14,
+    borderWidth: 1,
+    borderColor: "#dcecff",
   },
   loadingCard: {
-    backgroundColor: "#fffdf8",
+    backgroundColor: "#ffffff",
     borderRadius: 28,
     padding: 24,
     gap: 14,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#dcecff",
   },
   infoPanel: {
-    backgroundColor: "#fffdf8",
+    backgroundColor: "#f5faff",
     borderRadius: 20,
     padding: 18,
     gap: 8,
   },
   infoRow: {
-    color: "#22313c",
+    color: "#173c64",
   },
   loadingText: {
     marginTop: 14,
-    color: "#4f606a",
+    color: "#5c7895",
     fontSize: 15,
   },
 });

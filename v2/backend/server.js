@@ -1656,6 +1656,58 @@ async function handleAdminPasswordChange(request, response) {
   sendJson(response, 200, { ok: true });
 }
 
+async function handleAuthenticatedPasswordChange(request, response) {
+  const session = await requireAuthenticatedUser(request, response);
+  if (!session) {
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const currentPassword = `${body.currentPassword || ""}`;
+  const newPassword = `${body.newPassword || ""}`;
+
+  if (!currentPassword || !newPassword) {
+    sendJson(response, 400, { error: "Informe a senha atual e a nova senha." });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    sendJson(response, 400, { error: "A nova senha precisa ter pelo menos 6 caracteres." });
+    return;
+  }
+
+  if (!verifyPassword(currentPassword, session.user.passwordHash, session.user.passwordSalt)) {
+    sendJson(response, 401, { error: "A senha atual nao confere." });
+    return;
+  }
+
+  const credentials = hashPassword(newPassword);
+  await mutateStore((mutableStore) => {
+    const user = findUserById(mutableStore, session.user.id);
+    if (!user) {
+      throw new Error("Conta nao encontrada.");
+    }
+
+    user.passwordPlaintext = newPassword;
+    user.passwordHash = credentials.passwordHash;
+    user.passwordSalt = credentials.passwordSalt;
+    user.updatedAt = new Date().toISOString();
+    appendAudit(
+      mutableStore,
+      "self-password-change",
+      `Senha da conta ${user.email} atualizada pelo proprio usuario.`,
+      {
+        by: user.email,
+        customerId: user.customerId || "",
+        userId: user.id,
+        role: user.role,
+      }
+    );
+  });
+
+  sendJson(response, 200, { ok: true });
+}
+
 async function routeRequest(request, response) {
   const pathname = normalizeUrlPath(request.url || "/");
 
@@ -1682,6 +1734,11 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && pathname === "/api/auth/login") {
     await handleLogin(request, response);
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/auth/change-password") {
+    await handleAuthenticatedPasswordChange(request, response);
     return;
   }
 
