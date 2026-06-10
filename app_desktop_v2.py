@@ -14,7 +14,12 @@ from app_desktop import APP_TITLE, AttendanceDesktopApp, resolve_storage_dir
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_API_URL = "http://localhost:8787"
+DEFAULT_API_URL = "https://alfatec-flauzino-s-projects.vercel.app"
+LEGACY_API_URLS = {
+    "http://localhost:8787",
+    "http://127.0.0.1:8787",
+    "https://controle-alfatec-v2.onrender.com",
+}
 SESSION_FILE = resolve_storage_dir() / "license_v2_session.json"
 
 
@@ -108,7 +113,7 @@ def load_session_state():
     ensure_session_dir()
     default_state = {
         "api_url": DEFAULT_API_URL,
-        "email": "cliente@alfatec.com",
+        "email": "",
         "token": "",
         "user": None,
         "device_id": f"desktop-{uuid4().hex}",
@@ -127,9 +132,13 @@ def load_session_state():
     except Exception:
         loaded = {}
 
+    loaded_api_url = normalize_api_url(loaded.get("api_url"))
+    if not loaded_api_url or loaded_api_url.lower() in LEGACY_API_URLS:
+        loaded_api_url = DEFAULT_API_URL
+
     return {
         **default_state,
-        "api_url": loaded.get("api_url") or DEFAULT_API_URL,
+        "api_url": loaded_api_url,
         "email": loaded.get("email") or default_state["email"],
         "token": loaded.get("token") or "",
         "user": loaded.get("user"),

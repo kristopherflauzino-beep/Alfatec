@@ -8,6 +8,8 @@ const STORAGE_KEYS = {
   rememberedLogin: "@chamada_v2_remembered_login",
 };
 
+const PUBLIC_VERCEL_API_URL = "https://alfatec-flauzino-s-projects.vercel.app";
+
 const DEFAULT_GITHUB_CONFIG_URLS = [
   "https://kristopherflauzino-beep.github.io/Alfatec/v2/mobile-server-config.json",
   "https://raw.githubusercontent.com/kristopherflauzino-beep/Alfatec/main/docs/v2/mobile-server-config.json",
@@ -17,6 +19,7 @@ const DEFAULT_GITHUB_CONFIG_URLS = [
 const LEGACY_LOCAL_API_URLS = new Set([
   "http://localhost:8787",
   "http://127.0.0.1:8787",
+  "https://controle-alfatec-v2.onrender.com",
 ]);
 
 export function isLegacyLocalApiUrl(value) {
@@ -133,9 +136,10 @@ export async function loadStoredApiUrl() {
   const defaultApiUrl = normalizeApiUrl(process.env.EXPO_PUBLIC_V2_DEFAULT_API_URL);
 
   for (const candidateUrl of [
-    remoteBootstrapApiUrl,
     storedApiUrl && !isLegacyLocalApiUrl(storedApiUrl) ? storedApiUrl : "",
     defaultApiUrl,
+    remoteBootstrapApiUrl,
+    PUBLIC_VERCEL_API_URL,
   ]) {
     const availableUrl = await probeApiUrlCandidate(candidateUrl);
     if (availableUrl) {
