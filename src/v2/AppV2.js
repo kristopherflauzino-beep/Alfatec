@@ -104,6 +104,11 @@ function LoginScreen({
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
+              autoComplete="off"
+              textContentType="none"
+              importantForAutofill="no"
+              selectionColor="#3b82f6"
+              cursorColor="#3b82f6"
               style={styles.input}
               placeholder="seuemail@alfatec.com"
               placeholderTextColor={V2_PLACEHOLDER_COLOR}
@@ -114,6 +119,11 @@ function LoginScreen({
               value={password}
               onChangeText={onPasswordChange}
               secureTextEntry={!passwordVisible}
+              autoComplete="off"
+              textContentType="none"
+              importantForAutofill="no"
+              selectionColor="#3b82f6"
+              cursorColor="#3b82f6"
               style={styles.input}
               placeholder="Digite sua senha"
               placeholderTextColor={V2_PLACEHOLDER_COLOR}
