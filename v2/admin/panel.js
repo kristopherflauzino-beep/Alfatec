@@ -8,11 +8,8 @@ const state = {
   portalView: "overview",
 };
 
-const REMOTE_API_BASE_URL = "https://alfatec-api.vercel.app";
-const API_BASE_URL = ["localhost", "127.0.0.1"].includes(window.location.hostname) ||
-  window.location.hostname.startsWith("alfatec-api")
-  ? ""
-  : REMOTE_API_BASE_URL;
+const FALLBACK_WEB_API_BASE_URL = "https://alfatec01.vercel.app";
+const API_BASE_URL = window.location.protocol === "file:" ? FALLBACK_WEB_API_BASE_URL : "";
 
 const elements = {
   entryPanel: document.getElementById("entry-panel"),
@@ -185,12 +182,16 @@ async function apiForm(path, formData) {
 }
 
 async function loadHealth() {
-  const response = await fetch(`${API_BASE_URL}/api/health`);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Servidor sem resposta.");
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/health`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return null;
+    }
+    return payload;
+  } catch (_error) {
+    return null;
   }
-  return payload;
 }
 
 function formatDate(value) {
@@ -381,13 +382,20 @@ function renderShellVisibility() {
   elements.logoutButton.classList.toggle("hidden", !loggedIn);
 }
 
-function updateHeader(health) {
-  if (health?.serverName) {
+function updateHeader(health, overview) {
+  if (overview?.serverName) {
+    elements.serverName.textContent = overview.serverName;
+  } else if (health?.serverName) {
     elements.serverName.textContent = health.serverName;
   }
 
+  if (!health && overview) {
+    elements.healthStatus.textContent = "Conectado";
+    return;
+  }
+
   if (!health) {
-    elements.healthStatus.textContent = "Sem resposta";
+    elements.healthStatus.textContent = "Indisponivel";
     return;
   }
 
@@ -723,6 +731,7 @@ function renderOverview(overview) {
     state.selectedCustomerId = customers[0]?.id || "";
   }
 
+  elements.serverName.textContent = overview.serverName || "Controle AlfaTec";
   elements.dataFile.textContent = overview.dataFile || "-";
   elements.systemDataFile.textContent = overview.dataFile || "-";
   elements.sessionStatus.textContent = `${overview.viewer.displayName || overview.viewer.email} (${overview.viewer.role})`;
@@ -735,8 +744,9 @@ function renderOverview(overview) {
 }
 
 async function refreshOverview() {
-  const [health, overview] = await Promise.all([loadHealth(), api("/api/portal/overview")]);
-  updateHeader(health);
+  const overview = await api("/api/portal/overview");
+  const health = await loadHealth();
+  updateHeader(health, overview);
   renderOverview(overview);
   renderShellVisibility();
 }
@@ -1086,8 +1096,7 @@ document.querySelectorAll("[data-toggle-password-target]").forEach((button) => {
 elements.headerRefreshButton.addEventListener("click", () => {
   if (!state.token) {
     loadHealth()
-      .then(updateHeader)
-      .catch((error) => showToast(error.message || "Servidor sem resposta."));
+      .then((health) => updateHeader(health));
     return;
   }
 
@@ -1176,5 +1185,4 @@ elements.adminSettingsForm.addEventListener("submit", (event) => {
 elements.customerExpiry.value = nextMonthDate();
 renderShellVisibility();
 loadHealth()
-  .then(updateHeader)
-  .catch((error) => showToast(error.message || "Nao foi possivel ler o status do servidor."));
+  .then((health) => updateHeader(health));

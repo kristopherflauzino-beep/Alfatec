@@ -297,6 +297,8 @@ code {
 
 .compact-entry-grid {
   grid-template-columns: minmax(320px, 560px);
+  justify-content: center;
+  margin-top: clamp(2rem, 10vh, 6rem);
 }
 
 .panel {
@@ -308,6 +310,11 @@ code {
 .entry-access-panel {
   display: grid;
   align-content: start;
+}
+
+.login-panel {
+  min-height: min(560px, calc(100vh - 8rem));
+  align-content: center;
 }
 
 .panel-head {
@@ -1162,6 +1169,7 @@ code {
 
   .compact-entry-grid {
     grid-template-columns: 1fr;
+    margin-top: 1.25rem;
   }
 }
 
