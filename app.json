@@ -2,7 +2,7 @@
   "expo": {
     "name": "APP De chamada",
     "slug": "chamada-do-professor",
-    "version": "2.1.14",
+    "version": "2.1.15",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.kristophercunha.chamadadoprofessor",
-      "versionCode": 31,
+      "versionCode": 32,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f8fbff"

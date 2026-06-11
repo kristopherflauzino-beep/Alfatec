@@ -10,7 +10,9 @@ const STORAGE_KEYS = {
 
 const PUBLIC_VERCEL_API_URL = "https://alfatec01.vercel.app";
 
-const DEFAULT_GITHUB_CONFIG_URLS = [
+const DEFAULT_BOOTSTRAP_CONFIG_URLS = [
+  "https://alfatec01.vercel.app/api/mobile-config",
+  "https://alfatec01.vercel.app/v2/mobile-server-config.json",
   "https://kristopherflauzino-beep.github.io/Alfatec/v2/mobile-server-config.json",
   "https://raw.githubusercontent.com/kristopherflauzino-beep/Alfatec/main/docs/v2/mobile-server-config.json",
   "https://raw.githubusercontent.com/kristopherflauzino-beep/Alfatec/main/v2/mobile-server-config.json",
@@ -29,7 +31,9 @@ export function isLegacyLocalApiUrl(value) {
 
 async function loadRemoteBootstrapApiUrl() {
   const configuredUrl = `${process.env.EXPO_PUBLIC_V2_CONFIG_URL || ""}`.trim();
-  const candidateConfigUrls = configuredUrl ? [configuredUrl] : DEFAULT_GITHUB_CONFIG_URLS;
+  const candidateConfigUrls = Array.from(
+    new Set([configuredUrl, ...DEFAULT_BOOTSTRAP_CONFIG_URLS].map((value) => `${value || ""}`.trim()).filter(Boolean))
+  );
 
   for (const remoteConfigUrl of candidateConfigUrls) {
     if (!remoteConfigUrl) {
@@ -49,7 +53,7 @@ async function loadRemoteBootstrapApiUrl() {
       }
 
       const payload = await response.json();
-      const apiUrl = normalizeApiUrl(payload?.apiUrl);
+      const apiUrl = normalizeApiUrl(payload?.apiUrl || payload?.serverUrl);
       if (apiUrl) {
         return apiUrl;
       }

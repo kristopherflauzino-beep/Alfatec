@@ -259,6 +259,15 @@ function normalizeUrlPath(urlString) {
   return new URL(urlString, "http://localhost").pathname;
 }
 
+function getPublicServerUrl(request) {
+  const forwardedProto = `${request.headers["x-forwarded-proto"] || ""}`.trim();
+  const host = `${request.headers.host || ""}`.trim();
+  if (host) {
+    return `${forwardedProto || "https"}://${host}`.replace(/\/+$/, "");
+  }
+  return "https://alfatec01.vercel.app";
+}
+
 function getBearerToken(request) {
   const authHeader = request.headers.authorization || "";
   if (!authHeader.startsWith("Bearer ")) {
@@ -1857,6 +1866,17 @@ async function routeRequest(request, response) {
       serverTime: new Date().toISOString(),
       serverName: store.settings.serverName,
       networkUrls: listNetworkUrls(),
+    });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/mobile-config") {
+    const store = await readStore();
+    sendJson(response, 200, {
+      ok: true,
+      apiUrl: getPublicServerUrl(request),
+      serverName: store.settings.serverName,
+      publishedAt: new Date().toISOString(),
     });
     return;
   }
