@@ -28,27 +28,6 @@
             </div>
           </div>
         </div>
-
-        <div class="status-stack">
-          <article class="status-panel">
-            <div class="status-row">
-              <span>Servidor</span>
-              <strong id="server-name">Controle AlfaTec</strong>
-            </div>
-            <div class="status-row">
-              <span>Saude</span>
-              <strong id="health-status">Verificando...</strong>
-            </div>
-            <div class="status-row">
-              <span>Sessao</span>
-              <strong id="session-status">Aguardando login</strong>
-            </div>
-            <div class="status-actions">
-              <button class="ghost" id="header-refresh-button" type="button">Atualizar</button>
-              <button class="ghost hidden" id="logout-button" type="button">Sair</button>
-            </div>
-          </article>
-        </div>
       </section>
 
       <section class="entry-grid compact-entry-grid" id="entry-panel">
@@ -167,6 +146,9 @@
               </button>
               <button class="ghost portal-menu-button" type="button" data-portal-view="users">
                 Usuarios
+              </button>
+              <button class="ghost portal-menu-button" type="button" data-portal-view="system">
+                Sistema
               </button>
               <button class="ghost portal-menu-button" type="button" data-portal-view="admin">
                 Admin
@@ -492,6 +474,40 @@
                       </label>
                       <button type="submit">Criar cliente</button>
                     </form>
+                  </article>
+                </div>
+              </section>
+
+              <section class="portal-view hidden" id="portal-view-system">
+                <div class="support-grid support-grid-system">
+                  <article class="status-panel panel">
+                    <div class="panel-head panel-head-compact">
+                      <div>
+                        <h2>Sistema</h2>
+                      </div>
+                    </div>
+
+                    <div class="status-row">
+                      <span>Servidor</span>
+                      <strong id="server-name">Controle AlfaTec</strong>
+                    </div>
+                    <div class="status-row">
+                      <span>Saude</span>
+                      <strong id="health-status">Verificando...</strong>
+                    </div>
+                    <div class="status-row">
+                      <span>Sessao</span>
+                      <strong id="session-status">Aguardando login</strong>
+                    </div>
+                    <div class="status-row">
+                      <span>Base</span>
+                      <strong id="system-data-file">-</strong>
+                    </div>
+
+                    <div class="status-actions">
+                      <button class="ghost" id="header-refresh-button" type="button">Atualizar</button>
+                      <button class="ghost hidden" id="logout-button" type="button">Sair</button>
+                    </div>
                   </article>
                 </div>
               </section>

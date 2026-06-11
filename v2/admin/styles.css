@@ -41,20 +41,7 @@ body {
 }
 
 body.portal-mode .masthead {
-  grid-template-columns: minmax(0, 1fr);
-  margin-bottom: 0.15rem;
-}
-
-body.portal-mode .hero-copy {
   display: none;
-}
-
-body.portal-mode .status-stack {
-  justify-items: end;
-}
-
-body.portal-mode .status-panel {
-  width: min(100%, 420px);
 }
 
 body.portal-mode .control-meta {
@@ -234,6 +221,10 @@ code {
   padding: 1rem;
   display: grid;
   gap: 0.8rem;
+}
+
+.portal-view .status-panel {
+  width: 100%;
 }
 
 .status-row {
@@ -536,6 +527,10 @@ code {
   gap: 1rem;
   align-items: start;
   min-width: 0;
+}
+
+.support-grid-system {
+  grid-template-columns: minmax(0, 520px);
 }
 
 .control-bar {

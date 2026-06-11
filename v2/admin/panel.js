@@ -29,6 +29,7 @@ const elements = {
   customerSearch: document.getElementById("customer-search"),
   statusFilter: document.getElementById("status-filter"),
   dataFile: document.getElementById("data-file"),
+  systemDataFile: document.getElementById("system-data-file"),
   metricTotal: document.getElementById("metric-total"),
   metricActive: document.getElementById("metric-active"),
   metricBlocked: document.getElementById("metric-blocked"),
@@ -351,7 +352,9 @@ function getFilteredCustomers() {
 }
 
 function getVisiblePortalViews() {
-  return isAdminViewer() ? ["overview", "subscription", "users", "admin", "audit"] : ["overview", "subscription", "users", "audit"];
+  return isAdminViewer()
+    ? ["overview", "subscription", "users", "system", "admin", "audit"]
+    : ["overview", "subscription", "users", "system", "audit"];
 }
 
 function setPortalView(view) {
@@ -721,6 +724,7 @@ function renderOverview(overview) {
   }
 
   elements.dataFile.textContent = overview.dataFile || "-";
+  elements.systemDataFile.textContent = overview.dataFile || "-";
   elements.sessionStatus.textContent = `${overview.viewer.displayName || overview.viewer.email} (${overview.viewer.role})`;
   renderMetrics(overview.metrics);
   applyRoleVisibility();
