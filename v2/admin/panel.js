@@ -71,6 +71,7 @@ const elements = {
   reactivateSubscriptionButton: document.getElementById("reactivate-subscription-button"),
   resetPasswordButton: document.getElementById("reset-password-button"),
   clearDevicesButton: document.getElementById("clear-devices-button"),
+  deleteCustomerButton: document.getElementById("delete-customer-button"),
   managerSwitchPanel: document.getElementById("manager-switch-panel"),
   managerUserSelect: document.getElementById("manager-user-select"),
   setManagerButton: document.getElementById("set-manager-button"),
@@ -611,6 +612,7 @@ function setDetailEditable(enabled) {
     elements.reactivateSubscriptionButton,
     elements.resetPasswordButton,
     elements.clearDevicesButton,
+    elements.deleteCustomerButton,
   ].forEach((element) => {
     if (element && "disabled" in element) {
       element.disabled = !enabled;
@@ -910,6 +912,29 @@ async function handleClearDevices() {
   await refreshOverview();
 }
 
+async function handleDeleteCustomer() {
+  const customer = getSelectedCustomer();
+  if (!customer || !isAdminViewer()) {
+    showToast("Somente o admin pode excluir clientes.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Excluir o cliente ${customer.customerName}?\n\nEssa acao remove usuarios, arquivos e vinculos desse cliente.`
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  await api(`/api/admin/customers/${customer.id}`, {
+    method: "DELETE",
+  });
+
+  state.selectedCustomerId = "";
+  showToast("Cliente excluido.");
+  await refreshOverview();
+}
+
 async function handleSetManager() {
   const customer = getSelectedCustomer();
   if (!customer || !isAdminViewer()) {
@@ -1145,6 +1170,9 @@ elements.resetPasswordButton.addEventListener("click", () => {
 });
 elements.clearDevicesButton.addEventListener("click", () => {
   handleClearDevices().catch((error) => showToast(error.message || "Nao foi possivel limpar os dispositivos."));
+});
+elements.deleteCustomerButton.addEventListener("click", () => {
+  handleDeleteCustomer().catch((error) => showToast(error.message || "Nao foi possivel excluir o cliente."));
 });
 elements.copySelectedEmailButton.addEventListener("click", () => {
   copySelectedEmail().catch((error) => showToast(error.message || "Nao foi possivel copiar o email."));

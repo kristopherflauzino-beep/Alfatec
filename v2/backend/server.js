@@ -1227,6 +1227,69 @@ async function handleResetCustomerPassword(request, response, customerId) {
   sendJson(response, 200, { ok: true });
 }
 
+async function handleDeleteCustomer(request, response, customerId) {
+  const session = await requireAdmin(request, response);
+  if (!session) {
+    return;
+  }
+
+  const targetCustomer = findCustomerById(session.store, customerId);
+  if (!targetCustomer) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  const removed = await mutateStore((mutableStore) => {
+    const customerIndex = mutableStore.customers.findIndex((customer) => customer.id === customerId);
+    if (customerIndex < 0) {
+      return null;
+    }
+
+    const [customer] = mutableStore.customers.splice(customerIndex, 1);
+    const removedUsers = (mutableStore.users || []).filter((user) => user.customerId === customerId);
+    mutableStore.users = (mutableStore.users || []).filter((user) => user.customerId !== customerId);
+
+    const removedFiles = (mutableStore.files || []).filter((file) => file.customerId === customerId);
+    mutableStore.files = (mutableStore.files || []).filter((file) => file.customerId !== customerId);
+
+    rebuildCustomerDeviceIds(mutableStore);
+    appendAudit(
+      mutableStore,
+      "customer-delete",
+      `Cliente ${customer.email} excluido por ${session.user.email}.`,
+      {
+        customerId: "",
+        deletedCustomerId: customerId,
+        deletedEmail: customer.email,
+        deletedUserCount: removedUsers.length,
+        deletedFileCount: removedFiles.length,
+        by: session.user.email,
+      }
+    );
+
+    return {
+      customer,
+      files: removedFiles,
+    };
+  });
+
+  if (!removed) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  for (const file of removed.files || []) {
+    if (file?.storedName) {
+      await removeUploadedFile(file);
+    }
+  }
+
+  sendJson(response, 200, {
+    ok: true,
+    deletedCustomerId: customerId,
+  });
+}
+
 async function handleClearDevices(request, response, customerId) {
   const session = await requirePortalUser(request, response);
   if (!session) {
@@ -1846,6 +1909,11 @@ async function routeRequest(request, response) {
   const updateCustomerMatch = pathname.match(/^\/api\/admin\/customers\/([^/]+)$/);
   if (request.method === "PATCH" && updateCustomerMatch) {
     await handleUpdateCustomer(request, response, updateCustomerMatch[1]);
+    return;
+  }
+
+  if (request.method === "DELETE" && updateCustomerMatch) {
+    await handleDeleteCustomer(request, response, updateCustomerMatch[1]);
     return;
   }
 
