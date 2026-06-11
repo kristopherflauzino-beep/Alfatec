@@ -14,11 +14,12 @@ from app_desktop import APP_TITLE, AttendanceDesktopApp, resolve_storage_dir
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_API_URL = "https://alfatec-api.vercel.app"
+DEFAULT_API_URL = "https://alfatec01.vercel.app"
 LEGACY_API_URLS = {
     "http://localhost:8787",
     "http://127.0.0.1:8787",
     "https://controle-alfatec-v2.onrender.com",
+    "https://alfatec-api.vercel.app",
 }
 SESSION_FILE = resolve_storage_dir() / "license_v2_session.json"
 
