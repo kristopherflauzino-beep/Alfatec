@@ -128,6 +128,9 @@
               <button class="ghost portal-menu-button" type="button" data-portal-view="users">
                 Usuarios
               </button>
+              <button class="ghost portal-menu-button" type="button" data-portal-view="finance">
+                Financeiro
+              </button>
               <button class="ghost portal-menu-button" type="button" data-portal-view="system">
                 Sistema
               </button>
@@ -340,6 +343,86 @@
                       </label>
                       <button type="submit">Criar usuario</button>
                     </form>
+                  </article>
+                </div>
+              </section>
+
+              <section class="portal-view hidden" id="portal-view-finance">
+                <div class="support-grid finance-view-grid">
+                  <article class="panel create-panel">
+                    <div class="panel-head panel-head-compact">
+                      <div>
+                        <h2 id="finance-title">Financeiro</h2>
+                      </div>
+                      <button class="ghost hidden" id="clear-financial-form-button" type="button">Novo lancamento</button>
+                    </div>
+
+                    <div id="finance-empty" class="empty-state compact-empty">
+                      <strong>Selecione um cliente para registrar o financeiro.</strong>
+                    </div>
+
+                    <div id="finance-content" class="stack hidden">
+                      <form id="financial-form" class="stack">
+                        <input id="financial-entry-id" type="hidden" />
+                        <div class="detail-grid finance-form-grid">
+                          <label>
+                            <span>Mes</span>
+                            <input id="financial-month" type="month" required />
+                          </label>
+                          <label>
+                            <span>Valor esperado</span>
+                            <input id="financial-expected" type="number" min="0" step="0.01" placeholder="0,00" required />
+                          </label>
+                          <label>
+                            <span>Valor recebido</span>
+                            <input id="financial-received" type="number" min="0" step="0.01" placeholder="0,00" required />
+                          </label>
+                          <label>
+                            <span>Valor faltante</span>
+                            <input id="financial-missing" type="text" readonly />
+                          </label>
+                        </div>
+
+                        <label>
+                          <span>Observacoes</span>
+                          <textarea id="financial-notes" rows="4" placeholder="Observacoes do mes"></textarea>
+                        </label>
+
+                        <div class="action-cluster">
+                          <button id="save-financial-button" type="submit">Salvar lancamento</button>
+                          <button class="ghost" id="download-financial-report-button" type="button">Gerar relatorio PDF</button>
+                        </div>
+                      </form>
+                    </div>
+                  </article>
+
+                  <article class="panel detail-panel">
+                    <div class="panel-head panel-head-compact">
+                      <div>
+                        <h2>Resumo financeiro</h2>
+                      </div>
+                    </div>
+
+                    <div id="financial-summary-grid" class="detail-facts hidden">
+                      <div class="fact-card">
+                        <span>Lancamentos</span>
+                        <strong id="financial-summary-count">0</strong>
+                      </div>
+                      <div class="fact-card">
+                        <span>Total esperado</span>
+                        <strong id="financial-summary-expected">R$ 0,00</strong>
+                      </div>
+                      <div class="fact-card">
+                        <span>Total recebido</span>
+                        <strong id="financial-summary-received">R$ 0,00</strong>
+                      </div>
+                      <div class="fact-card">
+                        <span>Total faltante</span>
+                        <strong id="financial-summary-missing">R$ 0,00</strong>
+                      </div>
+                    </div>
+
+                    <div id="financial-list" class="stack"></div>
                   </article>
                 </div>
               </section>

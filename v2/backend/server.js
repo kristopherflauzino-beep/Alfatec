@@ -2,6 +2,7 @@ const fs = require("fs");
 const http = require("http");
 const os = require("os");
 const path = require("path");
+const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const { signToken, verifyToken } = require("./auth");
 const {
   DEFAULT_ADMIN_EMAIL,
@@ -369,6 +370,414 @@ function addHours(isoDate, hours) {
   return new Date(new Date(isoDate).getTime() + hours * 60 * 60 * 1000).toISOString();
 }
 
+function parseFinancialMonth(value) {
+  const month = `${value || ""}`.trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Informe o mes no formato AAAA-MM.");
+  }
+  return month;
+}
+
+function parseFinancialAmount(value, label) {
+  const rawValue = `${value ?? ""}`.trim().replace(",", ".");
+  if (!rawValue) {
+    return 0;
+  }
+
+  const amount = Number(rawValue);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`Informe um valor valido em ${label}.`);
+  }
+  return Number(amount.toFixed(2));
+}
+
+function calculateMissingAmount(expectedAmount, receivedAmount) {
+  return Number((expectedAmount - receivedAmount).toFixed(2));
+}
+
+function formatCurrencyValue(value) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatMonthValue(month) {
+  if (!month) {
+    return "-";
+  }
+  const date = new Date(`${month}-01T12:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return month;
+  }
+  const label = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatIsoDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("pt-BR");
+}
+
+function sanitizeFinancialEntry(entry) {
+  const expectedAmount = Number.isFinite(entry?.expectedAmount) ? Number(entry.expectedAmount) : 0;
+  const receivedAmount = Number.isFinite(entry?.receivedAmount) ? Number(entry.receivedAmount) : 0;
+
+  return {
+    id: entry?.id || "",
+    month: entry?.month || "",
+    monthLabel: formatMonthValue(entry?.month),
+    expectedAmount: Number(expectedAmount.toFixed(2)),
+    receivedAmount: Number(receivedAmount.toFixed(2)),
+    missingAmount: calculateMissingAmount(expectedAmount, receivedAmount),
+    notes: `${entry?.notes || ""}`.trim(),
+    createdAt: entry?.createdAt || null,
+    updatedAt: entry?.updatedAt || null,
+  };
+}
+
+function sortFinancialEntries(entries) {
+  return [...(entries || [])].sort((left, right) => `${right.month || ""}`.localeCompare(`${left.month || ""}`));
+}
+
+function buildFinancialSummary(entries) {
+  const safeEntries = (entries || []).map(sanitizeFinancialEntry);
+  const totals = safeEntries.reduce(
+    (summary, entry) => {
+      summary.expectedAmount += entry.expectedAmount;
+      summary.receivedAmount += entry.receivedAmount;
+      summary.missingAmount += entry.missingAmount;
+      if (entry.missingAmount > 0) {
+        summary.pendingMonths += 1;
+      }
+      return summary;
+    },
+    {
+      totalEntries: safeEntries.length,
+      expectedAmount: 0,
+      receivedAmount: 0,
+      missingAmount: 0,
+      pendingMonths: 0,
+    }
+  );
+
+  return {
+    totalEntries: totals.totalEntries,
+    expectedAmount: Number(totals.expectedAmount.toFixed(2)),
+    receivedAmount: Number(totals.receivedAmount.toFixed(2)),
+    missingAmount: Number(totals.missingAmount.toFixed(2)),
+    pendingMonths: totals.pendingMonths,
+  };
+}
+
+function findFinancialEntry(customer, entryId) {
+  return (customer?.financialEntries || []).find((entry) => entry.id === entryId) || null;
+}
+
+function pdfColor(hexValue) {
+  const normalized = `${hexValue}`.replace("#", "");
+  const safeHex = normalized.length === 3
+    ? normalized.split("").map((chunk) => `${chunk}${chunk}`).join("")
+    : normalized;
+  return rgb(
+    Number.parseInt(safeHex.slice(0, 2), 16) / 255,
+    Number.parseInt(safeHex.slice(2, 4), 16) / 255,
+    Number.parseInt(safeHex.slice(4, 6), 16) / 255
+  );
+}
+
+function wrapPdfText(text, font, size, maxWidth) {
+  const normalized = `${text || ""}`.trim();
+  if (!normalized) {
+    return [""];
+  }
+
+  const words = normalized.split(/\s+/);
+  const lines = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const candidateLine = currentLine ? `${currentLine} ${word}` : word;
+    if (font.widthOfTextAtSize(candidateLine, size) <= maxWidth) {
+      currentLine = candidateLine;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    currentLine = word;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.length ? lines : [normalized];
+}
+
+function drawPdfLines(page, lines, x, topY, options) {
+  const { font, size, lineHeight, color } = options;
+  lines.forEach((line, index) => {
+    page.drawText(`${line || ""}`, {
+      x,
+      y: topY - size - index * lineHeight,
+      size,
+      font,
+      color,
+    });
+  });
+}
+
+function drawPdfRect(page, x, y, width, height, color, borderColor) {
+  page.drawRectangle({
+    x,
+    y,
+    width,
+    height,
+    color,
+    borderColor,
+    borderWidth: 1,
+  });
+}
+
+function loadFinancialLogoBuffer() {
+  const candidatePaths = [
+    path.join(ADMIN_DIR, "alfatec-logo.png"),
+    path.join(__dirname, "..", "..", "assets", "report-logo.png"),
+    path.join(__dirname, "..", "..", "assets", "alfatec-logo.png"),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (fs.existsSync(candidatePath)) {
+      return fs.readFileSync(candidatePath);
+    }
+  }
+
+  return null;
+}
+
+async function buildFinancialReportPdf(customer) {
+  const pdfDoc = await PDFDocument.create();
+  const fonts = {
+    regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
+    bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold),
+  };
+  const colors = {
+    ink: pdfColor("#173C64"),
+    brand: pdfColor("#2C6FD3"),
+    muted: pdfColor("#557390"),
+    panel: pdfColor("#F3F9FF"),
+    panelBorder: pdfColor("#DCEBFA"),
+    card: pdfColor("#FFFFFF"),
+    cardBorder: pdfColor("#D8E7F7"),
+    success: pdfColor("#1F7047"),
+    warning: pdfColor("#B45309"),
+  };
+  const pageConfig = {
+    width: 595,
+    height: 842,
+    margin: 30,
+  };
+  const financialEntries = sortFinancialEntries(customer.financialEntries || []).map(sanitizeFinancialEntry);
+  const summary = buildFinancialSummary(financialEntries);
+  const logoBuffer = loadFinancialLogoBuffer();
+  const logoImage = logoBuffer ? await pdfDoc.embedPng(logoBuffer) : null;
+  const logoRatio = logoImage ? logoImage.height / logoImage.width : 0;
+
+  let page = pdfDoc.addPage([pageConfig.width, pageConfig.height]);
+  let cursorY = pageConfig.height - pageConfig.margin;
+
+  const drawHeader = (currentPage, isContinuation = false) => {
+    const cardHeight = isContinuation ? 84 : 126;
+    const x = pageConfig.margin;
+    const y = cursorY - cardHeight;
+    const width = pageConfig.width - pageConfig.margin * 2;
+    drawPdfRect(currentPage, x, y, width, cardHeight, colors.panel, colors.panelBorder);
+
+    drawPdfLines(currentPage, ["CONTROLE ALFATEC"], x + 16, cursorY - 14, {
+      font: fonts.bold,
+      size: 10,
+      lineHeight: 12,
+      color: colors.brand,
+    });
+
+    const title = isContinuation ? "Relatorio financeiro - continuacao" : "Relatorio financeiro";
+    drawPdfLines(currentPage, [title], x + 16, cursorY - 32, {
+      font: fonts.bold,
+      size: 22,
+      lineHeight: 24,
+      color: colors.ink,
+    });
+
+    const subtitleLines = wrapPdfText(
+      `Cliente: ${customer.name} | Gerado em ${formatIsoDateTime(new Date().toISOString())}`,
+      fonts.regular,
+      10.5,
+      320
+    );
+    drawPdfLines(currentPage, subtitleLines, x + 16, cursorY - 62, {
+      font: fonts.regular,
+      size: 10.5,
+      lineHeight: 13,
+      color: colors.muted,
+    });
+
+    if (logoImage && logoRatio) {
+      const logoWidth = isContinuation ? 118 : 148;
+      const logoHeight = logoWidth * logoRatio;
+      currentPage.drawImage(logoImage, {
+        x: x + width - 16 - logoWidth,
+        y: y + cardHeight - 16 - logoHeight,
+        width: logoWidth,
+        height: logoHeight,
+      });
+    }
+
+    return y - 18;
+  };
+
+  const drawSummary = (currentPage) => {
+    const gap = 10;
+    const totalWidth = pageConfig.width - pageConfig.margin * 2;
+    const cardWidth = (totalWidth - gap * 3) / 4;
+    const cardHeight = 70;
+    const startX = pageConfig.margin;
+    const y = cursorY - cardHeight;
+    const cards = [
+      ["Meses", `${summary.totalEntries}`],
+      ["Esperado", formatCurrencyValue(summary.expectedAmount)],
+      ["Recebido", formatCurrencyValue(summary.receivedAmount)],
+      ["Faltante", formatCurrencyValue(summary.missingAmount)],
+    ];
+
+    cards.forEach(([label, value], index) => {
+      const x = startX + index * (cardWidth + gap);
+      drawPdfRect(currentPage, x, y, cardWidth, cardHeight, colors.card, colors.cardBorder);
+      drawPdfLines(currentPage, [label], x + 10, y + cardHeight - 10, {
+        font: fonts.bold,
+        size: 9,
+        lineHeight: 11,
+        color: colors.brand,
+      });
+      drawPdfLines(currentPage, wrapPdfText(value, fonts.bold, 14, cardWidth - 20), x + 10, y + cardHeight - 31, {
+        font: fonts.bold,
+        size: 14,
+        lineHeight: 16,
+        color: label === "Faltante" && summary.missingAmount > 0 ? colors.warning : colors.ink,
+      });
+    });
+
+    return y - 16;
+  };
+
+  const drawTableHeader = (currentPage) => {
+    const x = pageConfig.margin;
+    const y = cursorY - 28;
+    const columns = [
+      { label: "Mes", width: 96 },
+      { label: "Esperado", width: 90 },
+      { label: "Recebido", width: 90 },
+      { label: "Faltante", width: 90 },
+      { label: "Observacoes", width: 169 },
+    ];
+    let cursorX = x;
+
+    columns.forEach((column) => {
+      drawPdfRect(currentPage, cursorX, y, column.width, 28, colors.brand, colors.panelBorder);
+      drawPdfLines(currentPage, [column.label], cursorX + 8, y + 20, {
+        font: fonts.bold,
+        size: 9,
+        lineHeight: 11,
+        color: pdfColor("#FFFFFF"),
+      });
+      cursorX += column.width;
+    });
+
+    return y;
+  };
+
+  cursorY = drawHeader(page, false);
+  cursorY = drawSummary(page);
+  cursorY = drawTableHeader(page) - 8;
+
+  if (!financialEntries.length) {
+    const emptyLines = wrapPdfText(
+      "Nenhum lancamento financeiro foi cadastrado para este cliente ainda.",
+      fonts.regular,
+      11,
+      pageConfig.width - pageConfig.margin * 2 - 24
+    );
+    drawPdfRect(
+      page,
+      pageConfig.margin,
+      cursorY - 74,
+      pageConfig.width - pageConfig.margin * 2,
+      74,
+      colors.card,
+      colors.cardBorder
+    );
+    drawPdfLines(page, emptyLines, pageConfig.margin + 12, cursorY - 16, {
+      font: fonts.regular,
+      size: 11,
+      lineHeight: 14,
+      color: colors.muted,
+    });
+  } else {
+    for (const entry of financialEntries) {
+      const notesLines = wrapPdfText(entry.notes || "-", fonts.regular, 8.5, 153);
+      const rowHeight = Math.max(28, notesLines.length * 11 + 12);
+      if (cursorY - rowHeight < pageConfig.margin + 24) {
+        page = pdfDoc.addPage([pageConfig.width, pageConfig.height]);
+        cursorY = pageConfig.height - pageConfig.margin;
+        cursorY = drawHeader(page, true);
+        cursorY = drawTableHeader(page) - 8;
+      }
+
+      const rowY = cursorY - rowHeight;
+      const columns = [
+        { width: 96, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
+        { width: 90, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+        { width: 90, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+        {
+          width: 90,
+          text: formatCurrencyValue(entry.missingAmount),
+          color: entry.missingAmount > 0 ? colors.warning : colors.success,
+          font: fonts.bold,
+          size: 9,
+        },
+        { width: 169, text: entry.notes || "-", color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
+      ];
+
+      let currentX = pageConfig.margin;
+      columns.forEach((column) => {
+        drawPdfRect(page, currentX, rowY, column.width, rowHeight, colors.card, colors.cardBorder);
+        const textLines = column.lines || wrapPdfText(column.text, column.font, column.size, column.width - 12);
+        drawPdfLines(page, textLines, currentX + 6, rowY + rowHeight - 7, {
+          font: column.font,
+          size: column.size,
+          lineHeight: 11,
+          color: column.color,
+        });
+        currentX += column.width;
+      });
+
+      cursorY = rowY - 6;
+    }
+  }
+
+  return Buffer.from(await pdfDoc.save());
+}
+
 function computeCustomerStatus(customer) {
   const now = Date.now();
   const expiresAtMs = Date.parse(customer.expiresAt);
@@ -552,6 +961,7 @@ function sanitizeCustomerForPortal(store, customer) {
   const teacherUsers = getTeacherUsers(store, customer.id);
   const allUsers = managerUsers.concat(teacherUsers);
   const license = buildLicenseSnapshot(store, customer);
+  const financialEntries = sortFinancialEntries(customer.financialEntries || []).map(sanitizeFinancialEntry);
 
   return {
     ...license,
@@ -567,6 +977,8 @@ function sanitizeCustomerForPortal(store, customer) {
       .filter((file) => file.customerId === customer.id)
       .map(sanitizeLibraryFile)
       .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    financialEntries,
+    financialSummary: buildFinancialSummary(financialEntries),
     managerUsers: managerUsers.map(sanitizePortalUser),
     teacherUsers: teacherUsers.map(sanitizePortalUser).sort((left, right) =>
       left.displayName.localeCompare(right.displayName, "pt-BR")
@@ -963,6 +1375,221 @@ async function handlePortalOverview(request, response) {
   }
 
   sendJson(response, 200, renderOverview(session.store, session.user));
+}
+
+async function handleCreateFinancialEntry(request, response, customerId) {
+  const session = await requirePortalUser(request, response);
+  if (!session) {
+    return;
+  }
+
+  if (!canManageCustomer(session, customerId)) {
+    sendJson(response, 403, { error: "Voce nao pode alterar o financeiro deste cliente." });
+    return;
+  }
+
+  const customer = findCustomerById(session.store, customerId);
+  if (!customer) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  let month;
+  let expectedAmount;
+  let receivedAmount;
+
+  try {
+    month = parseFinancialMonth(body.month);
+    expectedAmount = parseFinancialAmount(body.expectedAmount, "Valor esperado");
+    receivedAmount = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Nao foi possivel validar o lancamento." });
+    return;
+  }
+
+  const createdEntry = await mutateStore((mutableStore) => {
+    const mutableCustomer = findCustomerById(mutableStore, customerId);
+    if (!mutableCustomer) {
+      throw new Error("Cliente nao encontrado.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const financialEntry = {
+      id: createId("finance"),
+      month,
+      expectedAmount,
+      receivedAmount,
+      notes: normalizeText(body.notes),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    mutableCustomer.financialEntries = sortFinancialEntries([
+      ...(mutableCustomer.financialEntries || []),
+      financialEntry,
+    ]);
+    mutableCustomer.updatedAt = nowIso;
+    appendAudit(
+      mutableStore,
+      "financial-create",
+      `Lancamento financeiro ${month} salvo para ${mutableCustomer.name}.`,
+      {
+        customerId,
+        financialEntryId: financialEntry.id,
+        month,
+        by: session.user.email,
+      }
+    );
+    return financialEntry;
+  });
+
+  sendJson(response, 201, sanitizeFinancialEntry(createdEntry));
+}
+
+async function handleUpdateFinancialEntry(request, response, customerId, entryId) {
+  const session = await requirePortalUser(request, response);
+  if (!session) {
+    return;
+  }
+
+  if (!canManageCustomer(session, customerId)) {
+    sendJson(response, 403, { error: "Voce nao pode alterar o financeiro deste cliente." });
+    return;
+  }
+
+  const customer = findCustomerById(session.store, customerId);
+  if (!customer) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  if (!findFinancialEntry(customer, entryId)) {
+    sendJson(response, 404, { error: "Lancamento financeiro nao encontrado." });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  let month;
+  let expectedAmount;
+  let receivedAmount;
+
+  try {
+    month = parseFinancialMonth(body.month);
+    expectedAmount = parseFinancialAmount(body.expectedAmount, "Valor esperado");
+    receivedAmount = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Nao foi possivel validar o lancamento." });
+    return;
+  }
+
+  const updatedEntry = await mutateStore((mutableStore) => {
+    const mutableCustomer = findCustomerById(mutableStore, customerId);
+    if (!mutableCustomer) {
+      throw new Error("Cliente nao encontrado.");
+    }
+
+    const targetEntry = findFinancialEntry(mutableCustomer, entryId);
+    if (!targetEntry) {
+      throw new Error("Lancamento financeiro nao encontrado.");
+    }
+
+    targetEntry.month = month;
+    targetEntry.expectedAmount = expectedAmount;
+    targetEntry.receivedAmount = receivedAmount;
+    targetEntry.notes = normalizeText(body.notes);
+    targetEntry.updatedAt = new Date().toISOString();
+    mutableCustomer.financialEntries = sortFinancialEntries(mutableCustomer.financialEntries || []);
+    mutableCustomer.updatedAt = targetEntry.updatedAt;
+    appendAudit(
+      mutableStore,
+      "financial-update",
+      `Lancamento financeiro ${month} atualizado para ${mutableCustomer.name}.`,
+      {
+        customerId,
+        financialEntryId: targetEntry.id,
+        month,
+        by: session.user.email,
+      }
+    );
+    return targetEntry;
+  });
+
+  sendJson(response, 200, sanitizeFinancialEntry(updatedEntry));
+}
+
+async function handleDeleteFinancialEntry(request, response, customerId, entryId) {
+  const session = await requirePortalUser(request, response);
+  if (!session) {
+    return;
+  }
+
+  if (!canManageCustomer(session, customerId)) {
+    sendJson(response, 403, { error: "Voce nao pode alterar o financeiro deste cliente." });
+    return;
+  }
+
+  const removedEntry = await mutateStore((mutableStore) => {
+    const mutableCustomer = findCustomerById(mutableStore, customerId);
+    if (!mutableCustomer) {
+      return null;
+    }
+
+    const entryIndex = (mutableCustomer.financialEntries || []).findIndex((entry) => entry.id === entryId);
+    if (entryIndex < 0) {
+      return null;
+    }
+
+    const [entry] = mutableCustomer.financialEntries.splice(entryIndex, 1);
+    mutableCustomer.updatedAt = new Date().toISOString();
+    appendAudit(
+      mutableStore,
+      "financial-delete",
+      `Lancamento financeiro ${entry.month} removido de ${mutableCustomer.name}.`,
+      {
+        customerId,
+        financialEntryId: entry.id,
+        month: entry.month,
+        by: session.user.email,
+      }
+    );
+    return entry;
+  });
+
+  if (!removedEntry) {
+    sendJson(response, 404, { error: "Lancamento financeiro nao encontrado." });
+    return;
+  }
+
+  sendJson(response, 200, { ok: true });
+}
+
+async function handleDownloadFinancialReport(request, response, customerId) {
+  const session = await requirePortalUser(request, response);
+  if (!session) {
+    return;
+  }
+
+  if (!canManageCustomer(session, customerId)) {
+    sendJson(response, 403, { error: "Voce nao pode gerar o relatorio deste cliente." });
+    return;
+  }
+
+  const customer = findCustomerById(session.store, customerId);
+  if (!customer) {
+    sendJson(response, 404, { error: "Cliente nao encontrado." });
+    return;
+  }
+
+  const pdfBuffer = await buildFinancialReportPdf(customer);
+  sendDownloadBuffer(
+    response,
+    {
+      mimeType: "application/pdf",
+      originalName: `relatorio-financeiro-${sanitizeFilename(customer.name)}.pdf`,
+    },
+    pdfBuffer
+  );
 }
 
 async function handleClientSync(request, response) {
@@ -1921,6 +2548,12 @@ async function routeRequest(request, response) {
     return;
   }
 
+  const createFinancialEntryMatch = pathname.match(/^\/api\/portal\/customers\/([^/]+)\/financial$/);
+  if (request.method === "POST" && createFinancialEntryMatch) {
+    await handleCreateFinancialEntry(request, response, createFinancialEntryMatch[1]);
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/files") {
     await handleUploadLibraryFile(request, response);
     return;
@@ -1963,6 +2596,23 @@ async function routeRequest(request, response) {
 
   if (request.method === "DELETE" && updatePortalUserMatch) {
     await handleDeletePortalUser(request, response, updatePortalUserMatch[1]);
+    return;
+  }
+
+  const updateFinancialEntryMatch = pathname.match(/^\/api\/portal\/customers\/([^/]+)\/financial\/([^/]+)$/);
+  if (request.method === "PATCH" && updateFinancialEntryMatch) {
+    await handleUpdateFinancialEntry(request, response, updateFinancialEntryMatch[1], updateFinancialEntryMatch[2]);
+    return;
+  }
+
+  if (request.method === "DELETE" && updateFinancialEntryMatch) {
+    await handleDeleteFinancialEntry(request, response, updateFinancialEntryMatch[1], updateFinancialEntryMatch[2]);
+    return;
+  }
+
+  const financialReportMatch = pathname.match(/^\/api\/portal\/customers\/([^/]+)\/financial-report$/);
+  if (request.method === "GET" && financialReportMatch) {
+    await handleDownloadFinancialReport(request, response, financialReportMatch[1]);
     return;
   }
 

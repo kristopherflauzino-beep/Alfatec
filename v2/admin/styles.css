@@ -536,6 +536,10 @@ code {
   min-width: 0;
 }
 
+.finance-view-grid {
+  grid-template-columns: minmax(340px, 0.95fr) minmax(0, 1.05fr);
+}
+
 .support-grid-system {
   grid-template-columns: minmax(0, 520px);
 }
@@ -742,6 +746,10 @@ code {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
+}
+
+.finance-form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .detail-secondary {
@@ -1069,6 +1077,46 @@ code {
   background: rgba(246, 250, 255, 0.88);
 }
 
+.financial-card {
+  display: grid;
+  gap: 0.95rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(246, 250, 255, 0.88);
+}
+
+.financial-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.financial-card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.financial-card-head p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.finance-negative,
+.finance-positive {
+  font-weight: 700;
+}
+
+.finance-negative {
+  color: var(--warning);
+}
+
+.finance-positive {
+  color: var(--success);
+}
+
 .device-card-head {
   display: flex;
   justify-content: space-between;
@@ -1133,6 +1181,10 @@ code {
   }
 
   .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1218,6 +1270,7 @@ code {
   .guide-list,
   .metrics-grid,
   .detail-grid,
+  .finance-form-grid,
   .detail-facts,
   .detail-secondary,
   .compact-secondary,

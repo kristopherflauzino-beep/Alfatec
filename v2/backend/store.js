@@ -6,7 +6,7 @@ const DATA_DIR = process.env.V2_DATA_DIR
   ? path.resolve(process.env.V2_DATA_DIR)
   : path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
-const STORE_VERSION = 5;
+const STORE_VERSION = 6;
 const DEFAULT_OFFLINE_GRACE_HOURS = 24 * 10;
 const ALFATEC_EMAIL_DOMAIN = "alfatec.com";
 const DEFAULT_ADMIN_EMAIL = "admin@alfatec.com";
@@ -270,8 +270,37 @@ function normalizeCustomer(rawCustomer, nowIso) {
     blockedReason: `${rawCustomer.blockedReason || ""}`.trim(),
     notes: `${rawCustomer.notes || ""}`.trim(),
     deviceIds: uniqueStrings(rawCustomer.deviceIds),
+    financialEntries: Array.isArray(rawCustomer.financialEntries)
+      ? rawCustomer.financialEntries
+        .map((entry) => normalizeFinancialEntry(entry, nowIso))
+        .sort((left, right) => `${right.month}`.localeCompare(`${left.month}`))
+      : [],
     createdAt: rawCustomer.createdAt || nowIso,
     updatedAt: rawCustomer.updatedAt || nowIso,
+  };
+}
+
+function normalizeFinancialEntry(rawEntry, nowIso) {
+  const month = `${rawEntry?.month || ""}`.trim();
+  const expectedAmount = Number.isFinite(rawEntry?.expectedAmount)
+    ? Number(rawEntry.expectedAmount)
+    : Number.isFinite(rawEntry?.valueExpected)
+      ? Number(rawEntry.valueExpected)
+      : 0;
+  const receivedAmount = Number.isFinite(rawEntry?.receivedAmount)
+    ? Number(rawEntry.receivedAmount)
+    : Number.isFinite(rawEntry?.valueReceived)
+      ? Number(rawEntry.valueReceived)
+      : 0;
+
+  return {
+    id: rawEntry?.id || createId("finance"),
+    month: /^\d{4}-\d{2}$/.test(month) ? month : nowIso.slice(0, 7),
+    expectedAmount: Number(expectedAmount.toFixed(2)),
+    receivedAmount: Number(receivedAmount.toFixed(2)),
+    notes: `${rawEntry?.notes || ""}`.trim(),
+    createdAt: rawEntry?.createdAt || nowIso,
+    updatedAt: rawEntry?.updatedAt || nowIso,
   };
 }
 

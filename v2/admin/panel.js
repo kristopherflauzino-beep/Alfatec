@@ -6,6 +6,7 @@ const state = {
   searchQuery: "",
   statusFilter: "all",
   portalView: "overview",
+  editingFinancialEntryId: "",
 };
 
 const FALLBACK_WEB_API_BASE_URL = "https://alfatec01.vercel.app";
@@ -82,6 +83,25 @@ const elements = {
   teacherEmail: document.getElementById("teacher-email"),
   teacherPassword: document.getElementById("teacher-password"),
   teacherLimitNote: document.getElementById("teacher-limit-note"),
+  financeTitle: document.getElementById("finance-title"),
+  financeEmpty: document.getElementById("finance-empty"),
+  financeContent: document.getElementById("finance-content"),
+  financialForm: document.getElementById("financial-form"),
+  financialEntryId: document.getElementById("financial-entry-id"),
+  financialMonth: document.getElementById("financial-month"),
+  financialExpected: document.getElementById("financial-expected"),
+  financialReceived: document.getElementById("financial-received"),
+  financialMissing: document.getElementById("financial-missing"),
+  financialNotes: document.getElementById("financial-notes"),
+  saveFinancialButton: document.getElementById("save-financial-button"),
+  clearFinancialFormButton: document.getElementById("clear-financial-form-button"),
+  downloadFinancialReportButton: document.getElementById("download-financial-report-button"),
+  financialSummaryGrid: document.getElementById("financial-summary-grid"),
+  financialSummaryCount: document.getElementById("financial-summary-count"),
+  financialSummaryExpected: document.getElementById("financial-summary-expected"),
+  financialSummaryReceived: document.getElementById("financial-summary-received"),
+  financialSummaryMissing: document.getElementById("financial-summary-missing"),
+  financialList: document.getElementById("financial-list"),
   customerForm: document.getElementById("customer-form"),
   customerName: document.getElementById("customer-name"),
   customerEmail: document.getElementById("customer-email"),
@@ -182,6 +202,32 @@ async function apiForm(path, formData) {
   return payload;
 }
 
+async function downloadFromApi(path, fallbackFilename) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Nao foi possivel gerar o relatorio.");
+  }
+
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  const filename = decodeURIComponent(filenameMatch?.[1] || fallbackFilename || "download.bin");
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
 async function loadHealth() {
   try {
     const response = await fetch(`${API_BASE_URL}/api/health`);
@@ -215,6 +261,21 @@ function formatDateOnly(value) {
     return "";
   }
   return date.toISOString().slice(0, 10);
+}
+
+function formatMonth(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(`${value}-01T12:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const label = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatCurrency(value) {
@@ -252,6 +313,23 @@ function nextMonthDate() {
   const date = new Date();
   date.setMonth(date.getMonth() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+function nextMonthValue() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function parseMoneyValue(value) {
+  const normalizedValue = `${value ?? ""}`.trim().replace(",", ".");
+  if (!normalizedValue) {
+    return 0;
+  }
+  const amount = Number(normalizedValue);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function calculateFinancialMissingAmount(expectedAmount, receivedAmount) {
+  return Number((expectedAmount - receivedAmount).toFixed(2));
 }
 
 function togglePasswordVisibility(input, button) {
@@ -355,8 +433,8 @@ function getFilteredCustomers() {
 
 function getVisiblePortalViews() {
   return isAdminViewer()
-    ? ["overview", "subscription", "users", "system", "admin", "audit"]
-    : ["overview", "subscription", "users", "system", "audit"];
+    ? ["overview", "subscription", "users", "finance", "system", "admin", "audit"]
+    : ["overview", "subscription", "users", "finance", "system", "audit"];
 }
 
 function setPortalView(view) {
@@ -594,6 +672,98 @@ function renderDevices(customer) {
     .join("");
 }
 
+function resetFinancialForm(options = {}) {
+  const { preserveMonth = false } = options;
+  state.editingFinancialEntryId = "";
+  elements.financialEntryId.value = "";
+  elements.financialMonth.value = preserveMonth && elements.financialMonth.value ? elements.financialMonth.value : nextMonthValue();
+  elements.financialExpected.value = "";
+  elements.financialReceived.value = "";
+  elements.financialNotes.value = "";
+  elements.saveFinancialButton.textContent = "Salvar lancamento";
+  elements.clearFinancialFormButton.classList.add("hidden");
+  syncFinancialMissingPreview();
+}
+
+function syncFinancialMissingPreview() {
+  const expectedAmount = parseMoneyValue(elements.financialExpected.value);
+  const receivedAmount = parseMoneyValue(elements.financialReceived.value);
+  const missingAmount = calculateFinancialMissingAmount(expectedAmount, receivedAmount);
+  elements.financialMissing.value = formatCurrency(missingAmount);
+  elements.financialMissing.classList.toggle("finance-negative", missingAmount > 0);
+  elements.financialMissing.classList.toggle("finance-positive", missingAmount <= 0);
+}
+
+function renderFinancial(customer) {
+  if (!customer) {
+    state.editingFinancialEntryId = "";
+    elements.financeTitle.textContent = "Financeiro";
+    elements.financeEmpty.classList.remove("hidden");
+    elements.financeContent.classList.add("hidden");
+    elements.financialSummaryGrid.classList.add("hidden");
+    elements.financialList.innerHTML =
+      `<div class="empty-state compact-empty"><strong>Selecione um cliente para visualizar os lancamentos.</strong></div>`;
+    resetFinancialForm();
+    return;
+  }
+
+  const entries = customer.financialEntries || [];
+  const summary = customer.financialSummary || {
+    totalEntries: 0,
+    expectedAmount: 0,
+    receivedAmount: 0,
+    missingAmount: 0,
+  };
+
+  if (state.editingFinancialEntryId && !entries.some((entry) => entry.id === state.editingFinancialEntryId)) {
+    resetFinancialForm({ preserveMonth: true });
+  }
+
+  elements.financeTitle.textContent = `Financeiro de ${customer.customerName}`;
+  elements.financeEmpty.classList.add("hidden");
+  elements.financeContent.classList.remove("hidden");
+  elements.financialSummaryGrid.classList.remove("hidden");
+  elements.financialSummaryCount.textContent = `${summary.totalEntries || 0}`;
+  elements.financialSummaryExpected.textContent = formatCurrency(summary.expectedAmount || 0);
+  elements.financialSummaryReceived.textContent = formatCurrency(summary.receivedAmount || 0);
+  elements.financialSummaryMissing.textContent = formatCurrency(summary.missingAmount || 0);
+
+  if (!entries.length) {
+    elements.financialList.innerHTML =
+      `<div class="empty-state compact-empty"><strong>Nenhum lancamento financeiro cadastrado.</strong><p>Preencha o mes, o valor esperado e o valor recebido para começar.</p></div>`;
+    return;
+  }
+
+  elements.financialList.innerHTML = entries
+    .map((entry) => {
+      const missingClass = entry.missingAmount > 0 ? "pill expired" : "pill active";
+      const missingLabel = entry.missingAmount > 0 ? "Faltante" : "Fechado";
+
+      return `
+        <article class="financial-card">
+          <div class="financial-card-head">
+            <div>
+              <h3>${escapeHtml(entry.monthLabel || formatMonth(entry.month))}</h3>
+              <p>${escapeHtml(entry.notes || "Sem observacoes para este mes.")}</p>
+            </div>
+            <span class="${missingClass}">${escapeHtml(missingLabel)}</span>
+          </div>
+          <div class="user-meta-grid">
+            <div><span>Esperado</span><strong>${escapeHtml(formatCurrency(entry.expectedAmount || 0))}</strong></div>
+            <div><span>Recebido</span><strong>${escapeHtml(formatCurrency(entry.receivedAmount || 0))}</strong></div>
+            <div><span>Faltante</span><strong>${escapeHtml(formatCurrency(entry.missingAmount || 0))}</strong></div>
+            <div><span>Atualizado</span><strong>${escapeHtml(formatDate(entry.updatedAt))}</strong></div>
+          </div>
+          <div class="action-cluster">
+            <button class="ghost" type="button" data-financial-action="edit" data-financial-id="${escapeHtml(entry.id)}">Editar</button>
+            <button class="ghost" type="button" data-financial-action="delete" data-financial-id="${escapeHtml(entry.id)}">Excluir</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function setDetailEditable(enabled) {
   [
     elements.detailName,
@@ -641,6 +811,7 @@ function renderDetail() {
     elements.subscriptionStatusPreview.textContent = "-";
     elements.subscriptionExpiryPreview.textContent = "-";
     elements.subscriptionPlanPreview.textContent = "-";
+    renderFinancial(null);
     return;
   }
 
@@ -680,6 +851,7 @@ function renderDetail() {
   renderManagers(customer);
   renderTeacherUsers(customer);
   renderDevices(customer);
+  renderFinancial(customer);
   setDetailEditable(isAdminViewer());
 }
 
@@ -778,6 +950,7 @@ function logout() {
   state.currentUser = null;
   state.selectedCustomerId = "";
   state.portalView = "overview";
+  state.editingFinancialEntryId = "";
   renderShellVisibility();
   elements.sessionStatus.textContent = "Aguardando login";
   elements.customersList.innerHTML = "";
@@ -785,7 +958,12 @@ function logout() {
   elements.managerUsersList.innerHTML = "";
   elements.teacherUsersList.innerHTML = "";
   elements.teacherLimitNote.textContent = "";
+  elements.financialList.innerHTML = "";
+  elements.financialSummaryGrid.classList.add("hidden");
+  elements.financeContent.classList.add("hidden");
+  elements.financeEmpty.classList.remove("hidden");
   elements.loginPassword.value = "";
+  resetFinancialForm();
   elements.portalMenuBar.querySelectorAll("[data-portal-view]").forEach((button) => {
     button.classList.remove("portal-menu-button-active");
   });
@@ -982,6 +1160,104 @@ async function handleCreateCustomer(event) {
   elements.customerExpiry.value = nextMonthDate();
   showToast("Cliente criado com sucesso.");
   await refreshOverview();
+}
+
+function startFinancialEditing(entry) {
+  state.editingFinancialEntryId = entry.id;
+  elements.financialEntryId.value = entry.id;
+  elements.financialMonth.value = entry.month || nextMonthValue();
+  elements.financialExpected.value = typeof entry.expectedAmount === "number" ? entry.expectedAmount.toFixed(2) : "";
+  elements.financialReceived.value = typeof entry.receivedAmount === "number" ? entry.receivedAmount.toFixed(2) : "";
+  elements.financialNotes.value = entry.notes || "";
+  elements.saveFinancialButton.textContent = "Salvar alteracoes";
+  elements.clearFinancialFormButton.classList.remove("hidden");
+  syncFinancialMissingPreview();
+}
+
+async function handleFinancialFormSubmit(event) {
+  event.preventDefault();
+  const customer = getSelectedCustomer();
+  if (!customer) {
+    throw new Error("Selecione um cliente antes de salvar o financeiro.");
+  }
+
+  const payload = {
+    month: elements.financialMonth.value,
+    expectedAmount: elements.financialExpected.value,
+    receivedAmount: elements.financialReceived.value,
+    notes: elements.financialNotes.value,
+  };
+
+  if (state.editingFinancialEntryId) {
+    await api(`/api/portal/customers/${customer.id}/financial/${state.editingFinancialEntryId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    showToast("Lancamento financeiro atualizado.");
+  } else {
+    await api(`/api/portal/customers/${customer.id}/financial`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    showToast("Lancamento financeiro salvo.");
+  }
+
+  resetFinancialForm({ preserveMonth: true });
+  await refreshOverview();
+  setPortalView("finance");
+}
+
+async function handleDownloadFinancialReport() {
+  const customer = getSelectedCustomer();
+  if (!customer) {
+    throw new Error("Selecione um cliente antes de gerar o relatorio.");
+  }
+
+  await downloadFromApi(
+    `/api/portal/customers/${customer.id}/financial-report`,
+    `relatorio-financeiro-${customer.customerName || "cliente"}.pdf`
+  );
+  showToast("Relatorio financeiro em PDF gerado.");
+}
+
+async function handleFinancialListClick(event) {
+  const button = event.target.closest("[data-financial-action]");
+  if (!button) {
+    return;
+  }
+
+  const customer = getSelectedCustomer();
+  if (!customer) {
+    return;
+  }
+
+  const entry = (customer.financialEntries || []).find((item) => item.id === button.dataset.financialId);
+  if (!entry) {
+    throw new Error("Lancamento financeiro nao encontrado.");
+  }
+
+  if (button.dataset.financialAction === "edit") {
+    startFinancialEditing(entry);
+    return;
+  }
+
+  if (button.dataset.financialAction === "delete") {
+    const confirmed = window.confirm(`Excluir o lancamento de ${entry.monthLabel || formatMonth(entry.month)}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await api(`/api/portal/customers/${customer.id}/financial/${entry.id}`, {
+      method: "DELETE",
+    });
+
+    showToast("Lancamento financeiro excluido.");
+    if (state.editingFinancialEntryId === entry.id) {
+      resetFinancialForm({ preserveMonth: true });
+    }
+    await refreshOverview();
+    setPortalView("finance");
+  }
 }
 
 async function handleCreateTeacher(event) {
@@ -1183,6 +1459,9 @@ elements.customerForm.addEventListener("submit", (event) => {
 elements.teacherUserForm.addEventListener("submit", (event) => {
   handleCreateTeacher(event).catch((error) => showToast(error.message || "Nao foi possivel criar o usuario."));
 });
+elements.financialForm.addEventListener("submit", (event) => {
+  handleFinancialFormSubmit(event).catch((error) => showToast(error.message || "Nao foi possivel salvar o lancamento financeiro."));
+});
 elements.setManagerButton.addEventListener("click", () => {
   handleSetManager().catch((error) => showToast(error.message || "Nao foi possivel trocar o gerente."));
 });
@@ -1191,6 +1470,15 @@ elements.teacherUsersList.addEventListener("submit", (event) => {
 });
 elements.teacherUsersList.addEventListener("click", (event) => {
   handleTeacherCardClick(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar o usuario."));
+});
+elements.financialList.addEventListener("click", (event) => {
+  handleFinancialListClick(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar o financeiro."));
+});
+elements.downloadFinancialReportButton.addEventListener("click", () => {
+  handleDownloadFinancialReport().catch((error) => showToast(error.message || "Nao foi possivel gerar o relatorio financeiro."));
+});
+elements.clearFinancialFormButton.addEventListener("click", () => {
+  resetFinancialForm({ preserveMonth: true });
 });
 elements.adminSettingsForm.addEventListener("submit", (event) => {
   handleAdminPasswordChange(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar a senha."));
@@ -1210,7 +1498,17 @@ elements.adminSettingsForm.addEventListener("submit", (event) => {
   });
 });
 
+[
+  elements.financialExpected,
+  elements.financialReceived,
+].forEach((input) => {
+  input.addEventListener("input", () => {
+    syncFinancialMissingPreview();
+  });
+});
+
 elements.customerExpiry.value = nextMonthDate();
+resetFinancialForm();
 renderShellVisibility();
 loadHealth()
   .then((health) => updateHeader(health));
