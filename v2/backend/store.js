@@ -6,7 +6,7 @@ const DATA_DIR = process.env.V2_DATA_DIR
   ? path.resolve(process.env.V2_DATA_DIR)
   : path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
-const STORE_VERSION = 7;
+const STORE_VERSION = 8;
 const DEFAULT_OFFLINE_GRACE_HOURS = 24 * 10;
 const ALFATEC_EMAIL_DOMAIN = "alfatec.com";
 const DEFAULT_ADMIN_EMAIL = "admin@alfatec.com";
@@ -332,6 +332,7 @@ function normalizeFinancialEntry(rawEntry, nowIso) {
     month: normalizedMonth,
     groupMonths,
     monthsCount,
+    reportCustomerName: `${rawEntry?.reportCustomerName || ""}`.trim(),
     monthlyFee: monthlyFee === null ? null : Number(monthlyFee.toFixed(2)),
     payingCount,
     totalCount,

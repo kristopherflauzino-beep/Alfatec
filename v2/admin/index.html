@@ -353,6 +353,9 @@
                     <div class="panel-head panel-head-compact">
                       <div>
                         <h2 id="finance-title">Financeiro</h2>
+                        <p id="finance-selected-customer-hint" class="helper-copy finance-selected-customer-hint">
+                          Vinculo interno: selecione um cliente para liberar o financeiro.
+                        </p>
                       </div>
                       <button class="ghost hidden" id="clear-financial-form-button" type="button">Novo lancamento</button>
                     </div>
@@ -365,7 +368,19 @@
                       <form id="financial-form" class="stack">
                         <input id="financial-entry-id" type="hidden" />
                         <input id="financial-group-id" type="hidden" />
-                        <div class="detail-grid finance-form-grid">
+                        <div class="detail-grid finance-form-grid finance-form-grid-primary">
+                          <label class="finance-customer-name-field">
+                            <span>Nome do cliente no relatorio</span>
+                            <div class="finance-customer-name-input">
+                              <input
+                                id="financial-report-customer-name"
+                                type="text"
+                                placeholder="Digite o nome que deve aparecer no relatorio"
+                                required
+                              />
+                              <button class="ghost" id="financial-use-selected-customer-button" type="button">Usar selecionado</button>
+                            </div>
+                          </label>
                           <label class="finance-month-picker-field">
                             <span>Adicionar mes</span>
                             <div class="finance-month-picker">
@@ -376,10 +391,6 @@
                           <label>
                             <span>Valor da mensalidade</span>
                             <input id="financial-monthly-fee" type="number" min="0" step="0.01" placeholder="0,00" required />
-                          </label>
-                          <label>
-                            <span>Quantos pagantes</span>
-                            <input id="financial-paying-count" type="number" min="0" step="1" placeholder="0" required />
                           </label>
                           <label>
                             <span>Quantidade total</span>
@@ -396,7 +407,17 @@
                           </p>
                         </div>
 
-                        <div class="detail-grid finance-form-grid">
+                        <div class="finance-month-payers-panel">
+                          <span>Pagantes por mes</span>
+                          <div id="financial-month-payers-list" class="finance-month-payers-list"></div>
+                          <p id="financial-paying-summary" class="helper-copy">Distribua manualmente quantos pagaram em cada mes selecionado.</p>
+                        </div>
+
+                        <div class="detail-grid finance-form-grid finance-form-grid-totals">
+                          <label>
+                            <span>Total de pagantes</span>
+                            <input id="financial-total-paying-count" type="text" readonly />
+                          </label>
                           <label>
                             <span>Total esperado</span>
                             <input id="financial-expected" type="text" readonly />

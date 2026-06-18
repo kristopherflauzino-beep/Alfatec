@@ -419,6 +419,15 @@ function splitFinancialAmount(totalAmount, partsCount) {
   );
 }
 
+function splitFinancialCount(totalCount, partsCount) {
+  const safePartsCount = Math.max(partsCount || 1, 1);
+  const safeTotalCount = Math.max(parseFinancialCount(totalCount, "Pagantes"), 0);
+  const baseCount = Math.trunc(safeTotalCount / safePartsCount);
+  const remainder = safeTotalCount - baseCount * safePartsCount;
+
+  return Array.from({ length: safePartsCount }, (_unused, index) => baseCount + (index < remainder ? 1 : 0));
+}
+
 function parseFinancialMonths(value, fallbackMonth = "") {
   const monthCandidates = Array.isArray(value)
     ? value
@@ -471,6 +480,10 @@ function formatIsoDateTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function normalizeFinancialReportCustomerName(value, fallback = "") {
+  return normalizeText(value, fallback);
+}
+
 function buildFinancialCalculationSummary(entry) {
   const summaryParts = [];
 
@@ -502,6 +515,7 @@ function sanitizeFinancialEntry(entry) {
     monthLabel: formatMonthValue(entry?.month),
     groupMonths: Array.isArray(entry?.groupMonths) ? entry.groupMonths : [entry?.month || ""].filter(Boolean),
     monthsCount: Number.isInteger(entry?.monthsCount) && entry.monthsCount > 0 ? entry.monthsCount : 1,
+    reportCustomerName: normalizeFinancialReportCustomerName(entry?.reportCustomerName),
     monthlyFee: typeof entry?.monthlyFee === "number" && Number.isFinite(entry.monthlyFee)
       ? Number(entry.monthlyFee.toFixed(2))
       : null,
@@ -579,37 +593,70 @@ function rebuildFinancialGroupMetadata(financialEntries, groupId) {
   });
 }
 
+function resolveFinancialReportCustomerName(customer, overrideName = "") {
+  const explicitName = normalizeFinancialReportCustomerName(overrideName);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  const latestNamedEntry = sortFinancialEntries(customer?.financialEntries || []).find(
+    (entry) => normalizeFinancialReportCustomerName(entry?.reportCustomerName)
+  );
+  if (latestNamedEntry) {
+    return normalizeFinancialReportCustomerName(latestNamedEntry.reportCustomerName);
+  }
+
+  return normalizeFinancialReportCustomerName(customer?.name, "Cliente");
+}
+
+function parseFinancialPayingCountsByMonth(value, months) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return months.map((month) =>
+      parseFinancialCount(value[month] ?? 0, `Pagantes de ${formatMonthValue(month)}`)
+    );
+  }
+
+  const fallbackCount = parseFinancialCount(value ?? 0, "Total de pagantes");
+  return splitFinancialCount(fallbackCount, months.length);
+}
+
 function buildFinancialEntriesFromBody(body, options = {}) {
   const {
     notes = normalizeText(body.notes),
     groupId = "",
     createIdFactory = () => createId("finance"),
+    defaultReportCustomerName = "",
   } = options;
   const months = parseFinancialMonths(body.months, body.month);
   const usesBaseModel =
     Object.prototype.hasOwnProperty.call(body, "monthlyFee") ||
     Object.prototype.hasOwnProperty.call(body, "payingCount") ||
-    Object.prototype.hasOwnProperty.call(body, "totalCount");
+    Object.prototype.hasOwnProperty.call(body, "totalCount") ||
+    Object.prototype.hasOwnProperty.call(body, "payingCountsByMonth");
+  const reportCustomerName = normalizeFinancialReportCustomerName(body.reportCustomerName, defaultReportCustomerName);
+
+  if (!reportCustomerName) {
+    throw new Error("Digite o nome do cliente que deve aparecer no relatorio.");
+  }
 
   let monthlyFee = null;
-  let payingCount = null;
   let totalCount = null;
+  let payingCounts = [];
   let expectedAmountTotal = 0;
-  let receivedAmountTotal = 0;
+  let receivedShares = [];
 
   if (usesBaseModel) {
     monthlyFee = parseFinancialAmount(body.monthlyFee, "Valor da mensalidade");
-    payingCount = parseFinancialCount(body.payingCount, "Quantos pagantes");
     totalCount = parseFinancialCount(body.totalCount, "Quantidade total");
+    payingCounts = parseFinancialPayingCountsByMonth(body.payingCountsByMonth ?? body.payingCount, months);
     expectedAmountTotal = roundFinancialAmount(monthlyFee * totalCount);
-    receivedAmountTotal = roundFinancialAmount(monthlyFee * payingCount);
+    receivedShares = payingCounts.map((count) => roundFinancialAmount(monthlyFee * count));
   } else {
     expectedAmountTotal = parseFinancialAmount(body.expectedAmount, "Valor esperado");
-    receivedAmountTotal = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+    receivedShares = splitFinancialAmount(parseFinancialAmount(body.receivedAmount, "Valor recebido"), months.length);
   }
 
   const expectedShares = splitFinancialAmount(expectedAmountTotal, months.length);
-  const receivedShares = splitFinancialAmount(receivedAmountTotal, months.length);
   const normalizedGroupId = months.length > 1 ? `${groupId || createId("finance-group")}`.trim() : "";
   const safeNotes = normalizeText(notes);
 
@@ -619,8 +666,9 @@ function buildFinancialEntriesFromBody(body, options = {}) {
     month,
     groupMonths: months,
     monthsCount: months.length,
+    reportCustomerName,
     monthlyFee,
-    payingCount,
+    payingCount: Number.isInteger(payingCounts[index]) ? payingCounts[index] : null,
     totalCount,
     expectedAmount: expectedShares[index],
     receivedAmount: receivedShares[index],
@@ -711,7 +759,7 @@ function loadFinancialLogoBuffer() {
   return null;
 }
 
-async function buildFinancialReportPdf(customer) {
+async function buildFinancialReportPdf(customer, options = {}) {
   const pdfDoc = await PDFDocument.create();
   const fonts = {
     regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
@@ -735,6 +783,7 @@ async function buildFinancialReportPdf(customer) {
   };
   const financialEntries = sortFinancialEntries(customer.financialEntries || []).map(sanitizeFinancialEntry);
   const summary = buildFinancialSummary(financialEntries);
+  const reportCustomerName = resolveFinancialReportCustomerName(customer, options.reportCustomerName);
   const logoBuffer = loadFinancialLogoBuffer();
   const logoImage = logoBuffer ? await pdfDoc.embedPng(logoBuffer) : null;
   const logoRatio = logoImage ? logoImage.height / logoImage.width : 0;
@@ -765,7 +814,7 @@ async function buildFinancialReportPdf(customer) {
     });
 
     const subtitleLines = wrapPdfText(
-      `Cliente: ${customer.name} | Gerado em ${formatIsoDateTime(new Date().toISOString())}`,
+      `Cliente: ${reportCustomerName} | Gerado em ${formatIsoDateTime(new Date().toISOString())}`,
       fonts.regular,
       10.5,
       320
@@ -829,11 +878,12 @@ async function buildFinancialReportPdf(customer) {
     const x = pageConfig.margin;
     const y = cursorY - 28;
     const columns = [
-      { label: "Mes", width: 96 },
-      { label: "Esperado", width: 90 },
-      { label: "Recebido", width: 90 },
-      { label: "Faltante", width: 90 },
-      { label: "Observacoes", width: 169 },
+      { label: "Mes", width: 86 },
+      { label: "Pagantes", width: 62 },
+      { label: "Esperado", width: 78 },
+      { label: "Recebido", width: 78 },
+      { label: "Faltante", width: 78 },
+      { label: "Observacoes", width: 153 },
     ];
     let cursorX = x;
 
@@ -879,8 +929,8 @@ async function buildFinancialReportPdf(customer) {
     });
   } else {
     for (const entry of financialEntries) {
-      const noteText = [entry.calculationSummary, entry.notes].filter(Boolean).join(" | ") || "-";
-      const notesLines = wrapPdfText(noteText, fonts.regular, 8.5, 153);
+      const noteText = [entry.reportCustomerName, entry.calculationSummary, entry.notes].filter(Boolean).join(" | ") || "-";
+      const notesLines = wrapPdfText(noteText, fonts.regular, 8.5, 137);
       const rowHeight = Math.max(28, notesLines.length * 11 + 12);
       if (cursorY - rowHeight < pageConfig.margin + 24) {
         page = pdfDoc.addPage([pageConfig.width, pageConfig.height]);
@@ -891,17 +941,18 @@ async function buildFinancialReportPdf(customer) {
 
       const rowY = cursorY - rowHeight;
       const columns = [
-        { width: 96, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
-        { width: 90, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
-        { width: 90, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+        { width: 86, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
+        { width: 62, text: `${entry.payingCount ?? 0}`, color: colors.ink, font: fonts.bold, size: 9 },
+        { width: 78, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+        { width: 78, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
         {
-          width: 90,
+          width: 78,
           text: formatCurrencyValue(entry.missingAmount),
           color: entry.missingAmount > 0 ? colors.warning : colors.success,
           font: fonts.bold,
           size: 9,
         },
-        { width: 169, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
+        { width: 153, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
       ];
 
       let currentX = pageConfig.margin;
@@ -1757,12 +1808,17 @@ async function handleDownloadFinancialReport(request, response, customerId) {
     return;
   }
 
-  const pdfBuffer = await buildFinancialReportPdf(customer);
+  const requestUrl = new URL(request.url, getPublicServerUrl(request));
+  const reportCustomerName = normalizeFinancialReportCustomerName(requestUrl.searchParams.get("reportCustomerName"));
+  const resolvedReportCustomerName = resolveFinancialReportCustomerName(customer, reportCustomerName);
+  const pdfBuffer = await buildFinancialReportPdf(customer, {
+    reportCustomerName: resolvedReportCustomerName,
+  });
   sendDownloadBuffer(
     response,
     {
       mimeType: "application/pdf",
-      originalName: `relatorio-financeiro-${sanitizeFilename(customer.name)}.pdf`,
+      originalName: `relatorio-financeiro-${sanitizeFilename(resolvedReportCustomerName)}.pdf`,
     },
     pdfBuffer
   );
