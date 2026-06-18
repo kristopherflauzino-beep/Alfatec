@@ -1116,6 +1116,10 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
+.finance-form-grid-transfer {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .finance-selected-customer-hint {
   margin-top: 0.45rem;
 }
@@ -1227,6 +1231,45 @@ code {
 
 .finance-month-payer-card input {
   margin-top: 0.1rem;
+}
+
+.finance-transfer-panel {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(246, 250, 255, 0.88);
+}
+
+.finance-transfer-toggle {
+  margin: 0;
+}
+
+.finance-transfer-list {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.finance-transfer-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.finance-transfer-card strong {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.finance-transfer-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .finance-split-hint {

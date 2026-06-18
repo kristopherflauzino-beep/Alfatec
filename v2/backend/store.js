@@ -6,7 +6,7 @@ const DATA_DIR = process.env.V2_DATA_DIR
   ? path.resolve(process.env.V2_DATA_DIR)
   : path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
-const STORE_VERSION = 8;
+const STORE_VERSION = 9;
 const DEFAULT_OFFLINE_GRACE_HOURS = 24 * 10;
 const ALFATEC_EMAIL_DOMAIN = "alfatec.com";
 const DEFAULT_ADMIN_EMAIL = "admin@alfatec.com";
@@ -321,6 +321,11 @@ function normalizeFinancialEntry(rawEntry, nowIso) {
     : Number.isFinite(rawEntry?.totalCount)
       ? Math.max(0, Math.round(Number(rawEntry.totalCount)))
       : null;
+  const repasseDivisor = Number.isInteger(rawEntry?.repasseDivisor)
+    ? rawEntry.repasseDivisor
+    : Number.isFinite(rawEntry?.repasseDivisor)
+      ? Math.max(0, Math.round(Number(rawEntry.repasseDivisor)))
+      : null;
   const groupMonths = normalizeFinancialMonths(rawEntry?.groupMonths, normalizedMonth);
   const monthsCount = Number.isInteger(rawEntry?.monthsCount) && rawEntry.monthsCount > 0
     ? rawEntry.monthsCount
@@ -336,6 +341,7 @@ function normalizeFinancialEntry(rawEntry, nowIso) {
     monthlyFee: monthlyFee === null ? null : Number(monthlyFee.toFixed(2)),
     payingCount,
     totalCount,
+    repasseDivisor,
     expectedAmount: Number(expectedAmount.toFixed(2)),
     receivedAmount: Number(receivedAmount.toFixed(2)),
     notes: `${rawEntry?.notes || ""}`.trim(),

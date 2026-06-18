@@ -403,7 +403,7 @@
                           <div id="financial-month-list" class="finance-month-list"></div>
                           <p id="financial-month-hint" class="helper-copy">Adicione um ou mais meses para o lancamento.</p>
                           <p id="financial-distribution-hint" class="helper-copy finance-split-hint">
-                            O sistema divide automaticamente os valores entre os meses selecionados.
+                            A quantidade total sera usada como referencia completa em cada mes selecionado.
                           </p>
                         </div>
 
@@ -430,6 +430,27 @@
                             <span>Total faltante</span>
                             <input id="financial-missing" type="text" readonly />
                           </label>
+                        </div>
+
+                        <div class="finance-transfer-panel">
+                          <label class="toggle-row finance-transfer-toggle">
+                            <input id="financial-transfer-enabled" type="checkbox" />
+                            <span>Calcular valor para repasse</span>
+                          </label>
+                          <p id="financial-transfer-hint" class="helper-copy">
+                            Se ativado, o valor recebido de cada mes sera dividido pelo numero informado abaixo.
+                          </p>
+                          <div class="detail-grid finance-form-grid finance-form-grid-transfer">
+                            <label>
+                              <span>Dividir recebido por</span>
+                              <input id="financial-transfer-divisor" type="number" min="1" step="1" placeholder="1" disabled />
+                            </label>
+                            <label>
+                              <span>Total para repasse</span>
+                              <input id="financial-transfer-total" type="text" readonly />
+                            </label>
+                          </div>
+                          <div id="financial-transfer-list" class="finance-transfer-list hidden"></div>
                         </div>
 
                         <label>

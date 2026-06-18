@@ -428,6 +428,17 @@ function splitFinancialCount(totalCount, partsCount) {
   return Array.from({ length: safePartsCount }, (_unused, index) => baseCount + (index < remainder ? 1 : 0));
 }
 
+function clampFinancialPayingCount(count, totalCount) {
+  if (totalCount > 0) {
+    return Math.min(Math.max(count, 0), totalCount);
+  }
+  return Math.max(count, 0);
+}
+
+function parseFinancialBoolean(value) {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
 function parseFinancialMonths(value, fallbackMonth = "") {
   const monthCandidates = Array.isArray(value)
     ? value
@@ -444,7 +455,7 @@ function parseFinancialMonths(value, fallbackMonth = "") {
 }
 
 function calculateMissingAmount(expectedAmount, receivedAmount) {
-  return Number((expectedAmount - receivedAmount).toFixed(2));
+  return Number(Math.max(expectedAmount - receivedAmount, 0).toFixed(2));
 }
 
 function formatCurrencyValue(value) {
@@ -497,7 +508,10 @@ function buildFinancialCalculationSummary(entry) {
     summaryParts.push(`${entry.totalCount} no total`);
   }
   if (Number.isInteger(entry?.monthsCount) && entry.monthsCount > 1) {
-    summaryParts.push(`rateado em ${entry.monthsCount} meses`);
+    summaryParts.push(`referencia repetida em ${entry.monthsCount} meses`);
+  }
+  if (Number.isInteger(entry?.repasseDivisor) && entry.repasseDivisor > 0) {
+    summaryParts.push(`repasse por ${entry.repasseDivisor}`);
   }
 
   return summaryParts.join(" | ");
@@ -506,7 +520,16 @@ function buildFinancialCalculationSummary(entry) {
 function sanitizeFinancialEntry(entry) {
   const expectedAmount = Number.isFinite(entry?.expectedAmount) ? Number(entry.expectedAmount) : 0;
   const receivedAmount = Number.isFinite(entry?.receivedAmount) ? Number(entry.receivedAmount) : 0;
+  const repasseDivisor = Number.isInteger(entry?.repasseDivisor)
+    ? entry.repasseDivisor
+    : Number.isFinite(entry?.repasseDivisor)
+      ? Math.max(0, Math.round(Number(entry.repasseDivisor)))
+      : null;
   const calculationSummary = buildFinancialCalculationSummary(entry);
+  const repasseAmount =
+    Number.isInteger(repasseDivisor) && repasseDivisor > 0
+      ? Number((receivedAmount / repasseDivisor).toFixed(2))
+      : null;
 
   return {
     id: entry?.id || "",
@@ -521,6 +544,8 @@ function sanitizeFinancialEntry(entry) {
       : null,
     payingCount: Number.isInteger(entry?.payingCount) ? entry.payingCount : null,
     totalCount: Number.isInteger(entry?.totalCount) ? entry.totalCount : null,
+    repasseDivisor,
+    repasseAmount,
     calculationSummary,
     expectedAmount: Number(expectedAmount.toFixed(2)),
     receivedAmount: Number(receivedAmount.toFixed(2)),
@@ -542,6 +567,7 @@ function buildFinancialSummary(entries) {
       summary.expectedAmount += entry.expectedAmount;
       summary.receivedAmount += entry.receivedAmount;
       summary.missingAmount += entry.missingAmount;
+      summary.repasseAmount += entry.repasseAmount || 0;
       if (entry.missingAmount > 0) {
         summary.pendingMonths += 1;
       }
@@ -552,6 +578,7 @@ function buildFinancialSummary(entries) {
       expectedAmount: 0,
       receivedAmount: 0,
       missingAmount: 0,
+      repasseAmount: 0,
       pendingMonths: 0,
     }
   );
@@ -561,6 +588,7 @@ function buildFinancialSummary(entries) {
     expectedAmount: Number(totals.expectedAmount.toFixed(2)),
     receivedAmount: Number(totals.receivedAmount.toFixed(2)),
     missingAmount: Number(totals.missingAmount.toFixed(2)),
+    repasseAmount: Number(totals.repasseAmount.toFixed(2)),
     pendingMonths: totals.pendingMonths,
   };
 }
@@ -609,15 +637,18 @@ function resolveFinancialReportCustomerName(customer, overrideName = "") {
   return normalizeFinancialReportCustomerName(customer?.name, "Cliente");
 }
 
-function parseFinancialPayingCountsByMonth(value, months) {
+function parseFinancialPayingCountsByMonth(value, months, totalCount = 0) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return months.map((month) =>
-      parseFinancialCount(value[month] ?? 0, `Pagantes de ${formatMonthValue(month)}`)
+      clampFinancialPayingCount(
+        parseFinancialCount(value[month] ?? 0, `Pagantes de ${formatMonthValue(month)}`),
+        totalCount
+      )
     );
   }
 
   const fallbackCount = parseFinancialCount(value ?? 0, "Total de pagantes");
-  return splitFinancialCount(fallbackCount, months.length);
+  return splitFinancialCount(fallbackCount, months.length).map((count) => clampFinancialPayingCount(count, totalCount));
 }
 
 function buildFinancialEntriesFromBody(body, options = {}) {
@@ -643,20 +674,29 @@ function buildFinancialEntriesFromBody(body, options = {}) {
   let totalCount = null;
   let payingCounts = [];
   let expectedAmountTotal = 0;
+  let repasseDivisor = null;
   let receivedShares = [];
 
   if (usesBaseModel) {
     monthlyFee = parseFinancialAmount(body.monthlyFee, "Valor da mensalidade");
     totalCount = parseFinancialCount(body.totalCount, "Quantidade total");
-    payingCounts = parseFinancialPayingCountsByMonth(body.payingCountsByMonth ?? body.payingCount, months);
-    expectedAmountTotal = roundFinancialAmount(monthlyFee * totalCount);
+    payingCounts = parseFinancialPayingCountsByMonth(body.payingCountsByMonth ?? body.payingCount, months, totalCount);
+    expectedAmountTotal = roundFinancialAmount(monthlyFee * totalCount * months.length);
     receivedShares = payingCounts.map((count) => roundFinancialAmount(monthlyFee * count));
+    repasseDivisor = parseFinancialBoolean(body.transferEnabled)
+      ? parseFinancialCount(body.transferDivisor, "Divisor do repasse")
+      : null;
+    if (repasseDivisor !== null && repasseDivisor <= 0) {
+      throw new Error("Informe um numero maior que zero para o divisor do repasse.");
+    }
   } else {
     expectedAmountTotal = parseFinancialAmount(body.expectedAmount, "Valor esperado");
     receivedShares = splitFinancialAmount(parseFinancialAmount(body.receivedAmount, "Valor recebido"), months.length);
   }
 
-  const expectedShares = splitFinancialAmount(expectedAmountTotal, months.length);
+  const expectedShares = usesBaseModel
+    ? months.map(() => roundFinancialAmount(monthlyFee * totalCount))
+    : splitFinancialAmount(expectedAmountTotal, months.length);
   const normalizedGroupId = months.length > 1 ? `${groupId || createId("finance-group")}`.trim() : "";
   const safeNotes = normalizeText(notes);
 
@@ -670,6 +710,7 @@ function buildFinancialEntriesFromBody(body, options = {}) {
     monthlyFee,
     payingCount: Number.isInteger(payingCounts[index]) ? payingCounts[index] : null,
     totalCount,
+    repasseDivisor,
     expectedAmount: expectedShares[index],
     receivedAmount: receivedShares[index],
     notes: safeNotes,

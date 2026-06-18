@@ -109,6 +109,11 @@ const elements = {
   financialExpected: document.getElementById("financial-expected"),
   financialReceived: document.getElementById("financial-received"),
   financialMissing: document.getElementById("financial-missing"),
+  financialTransferEnabled: document.getElementById("financial-transfer-enabled"),
+  financialTransferHint: document.getElementById("financial-transfer-hint"),
+  financialTransferDivisor: document.getElementById("financial-transfer-divisor"),
+  financialTransferTotal: document.getElementById("financial-transfer-total"),
+  financialTransferList: document.getElementById("financial-transfer-list"),
   financialNotes: document.getElementById("financial-notes"),
   saveFinancialButton: document.getElementById("save-financial-button"),
   clearFinancialFormButton: document.getElementById("clear-financial-form-button"),
@@ -358,11 +363,20 @@ function parseCountValue(value) {
 }
 
 function calculateFinancialMissingAmount(expectedAmount, receivedAmount) {
-  return Number((expectedAmount - receivedAmount).toFixed(2));
+  return Number(Math.max(expectedAmount - receivedAmount, 0).toFixed(2));
 }
 
 function roundCurrency(value) {
   return Number((Number(value || 0)).toFixed(2));
+}
+
+function clampFinancialPayingCount(value) {
+  const parsedValue = parseCountValue(value);
+  const totalCount = parseCountValue(elements.financialTotalCount.value);
+  if (totalCount > 0) {
+    return Math.min(parsedValue, totalCount);
+  }
+  return parsedValue;
 }
 
 function splitAmountAcrossMonths(amount, monthsCount) {
@@ -760,6 +774,13 @@ function resetFinancialForm(options = {}) {
   elements.financialTotalPayingCount.value = "0";
   elements.financialExpected.value = "";
   elements.financialReceived.value = "";
+  elements.financialMissing.value = "";
+  elements.financialTransferEnabled.checked = false;
+  elements.financialTransferDivisor.value = "";
+  elements.financialTransferDivisor.disabled = true;
+  elements.financialTransferTotal.value = "";
+  elements.financialTransferList.innerHTML = "";
+  elements.financialTransferList.classList.add("hidden");
   elements.financialNotes.value = "";
   elements.saveFinancialButton.textContent = "Salvar lancamento";
   elements.clearFinancialFormButton.classList.add("hidden");
@@ -790,14 +811,14 @@ function renderFinancialMonthSelection() {
 
   elements.financialMonthHint.textContent =
     selectedMonths.length > 1
-      ? `${selectedMonths.length} meses selecionados para rateio.`
+      ? `${selectedMonths.length} meses selecionados com a mesma referencia de quantidade total.`
       : "1 mes selecionado para este lancamento.";
 }
 
 function syncFinancialMonthPayingCounts() {
   const nextCounts = {};
   state.financialSelectedMonths.forEach((month) => {
-    nextCounts[month] = parseCountValue(state.financialPayingCountsByMonth[month]);
+    nextCounts[month] = clampFinancialPayingCount(state.financialPayingCountsByMonth[month]);
   });
   state.financialPayingCountsByMonth = nextCounts;
 }
@@ -841,7 +862,7 @@ function setFinancialPayingCount(month, value) {
 
   state.financialPayingCountsByMonth = {
     ...state.financialPayingCountsByMonth,
-    [normalizedMonth]: parseCountValue(value),
+    [normalizedMonth]: clampFinancialPayingCount(value),
   };
 }
 
@@ -865,14 +886,17 @@ function renderFinancialMonthPayers(preview) {
           <input
             type="number"
             min="0"
+            max="${preview.totalCount > 0 ? escapeHtml(String(preview.totalCount)) : ""}"
             step="1"
             value="${escapeHtml(String(payingCount))}"
             data-financial-paying-month="${escapeHtml(month)}"
           />
           <p>
-            Recebido no mes ${escapeHtml(formatCurrency(receivedAmount))} | Esperado ${escapeHtml(
-              formatCurrency(expectedAmount)
-            )} | Faltante ${escapeHtml(formatCurrency(missingAmount))}
+            Base do mes ${escapeHtml(formatCurrency(expectedAmount))} | Recebido ${escapeHtml(formatCurrency(receivedAmount))}
+            | Faltante ${escapeHtml(formatCurrency(missingAmount))}
+          </p>
+          <p>
+            Quantidade total de referencia: ${escapeHtml(String(preview.totalCount || 0))} aluno(s).
           </p>
         </label>
       `;
@@ -881,8 +905,8 @@ function renderFinancialMonthPayers(preview) {
 
   elements.financialPayingSummary.textContent =
     preview.monthsCount > 1
-      ? `Total de ${preview.totalPayingCount} pagante(s) distribuido(s) em ${preview.monthsCount} meses.`
-      : `Total de ${preview.totalPayingCount} pagante(s) registrado(s) para o mes selecionado.`;
+      ? `Cada mes usa ${preview.totalCount} aluno(s) como referencia. Total informado: ${preview.totalPayingCount} pagante(s).`
+      : `O mes selecionado usa ${preview.totalCount} aluno(s) como referencia. Total informado: ${preview.totalPayingCount} pagante(s).`;
 }
 
 function buildFinancialCalculationPreview() {
@@ -890,16 +914,24 @@ function buildFinancialCalculationPreview() {
   const totalCount = parseCountValue(elements.financialTotalCount.value);
   const selectedMonths = state.financialSelectedMonths.length ? state.financialSelectedMonths : [nextMonthValue()];
   const monthsCount = Math.max(selectedMonths.length || 1, 1);
-  const payingCounts = selectedMonths.map((month) => parseCountValue(state.financialPayingCountsByMonth[month]));
+  const payingCounts = selectedMonths.map((month) => clampFinancialPayingCount(state.financialPayingCountsByMonth[month]));
   const totalPayingCount = payingCounts.reduce((sum, count) => sum + count, 0);
-  const expectedAmount = roundCurrency(monthlyFee * totalCount);
+  const expectedAmountPerMonth = roundCurrency(monthlyFee * totalCount);
+  const expectedAmount = roundCurrency(expectedAmountPerMonth * monthsCount);
   const receivedShares = payingCounts.map((count) => roundCurrency(monthlyFee * count));
   const receivedAmount = roundCurrency(receivedShares.reduce((sum, amount) => sum + amount, 0));
-  const missingAmount = calculateFinancialMissingAmount(expectedAmount, receivedAmount);
-  const expectedShares = splitAmountAcrossMonths(expectedAmount, monthsCount);
+  const expectedShares = selectedMonths.map(() => expectedAmountPerMonth);
   const missingShares = expectedShares.map((expectedShare, index) =>
     calculateFinancialMissingAmount(expectedShare, receivedShares[index] || 0)
   );
+  const missingAmount = roundCurrency(missingShares.reduce((sum, amount) => sum + amount, 0));
+  const transferEnabled = elements.financialTransferEnabled.checked;
+  const transferDivisor = transferEnabled ? parseCountValue(elements.financialTransferDivisor.value) : 0;
+  const transferShares =
+    transferEnabled && transferDivisor > 0
+      ? receivedShares.map((amount) => roundCurrency(amount / transferDivisor))
+      : selectedMonths.map(() => 0);
+  const transferTotal = roundCurrency(transferShares.reduce((sum, amount) => sum + amount, 0));
 
   return {
     monthlyFee,
@@ -909,15 +941,62 @@ function buildFinancialCalculationPreview() {
     payingCounts,
     totalPayingCount,
     expectedAmount,
+    expectedAmountPerMonth,
     receivedAmount,
     missingAmount,
     expectedShares,
     receivedShares,
     missingShares,
+    transferEnabled,
+    transferDivisor,
+    transferShares,
+    transferTotal,
   };
 }
 
+function renderFinancialTransfer(preview) {
+  elements.financialTransferDivisor.disabled = !preview.transferEnabled;
+
+  if (!preview.transferEnabled) {
+    elements.financialTransferHint.textContent =
+      "Se ativado, o valor recebido de cada mes sera dividido pelo numero informado abaixo.";
+    elements.financialTransferTotal.value = "";
+    elements.financialTransferList.innerHTML = "";
+    elements.financialTransferList.classList.add("hidden");
+    return;
+  }
+
+  if (preview.transferDivisor <= 0) {
+    elements.financialTransferHint.textContent =
+      "Informe por quantas partes o valor recebido de cada mes deve ser dividido.";
+    elements.financialTransferTotal.value = "";
+    elements.financialTransferList.innerHTML = "";
+    elements.financialTransferList.classList.add("hidden");
+    return;
+  }
+
+  elements.financialTransferHint.textContent =
+    `Cada valor recebido sera dividido por ${preview.transferDivisor}. O resultado abaixo e o valor para repasse de cada mes.`;
+  elements.financialTransferTotal.value = formatCurrency(preview.transferTotal);
+  elements.financialTransferList.innerHTML = preview.selectedMonths
+    .map((month, index) => {
+      const receivedAmount = preview.receivedShares[index] || 0;
+      const transferAmount = preview.transferShares[index] || 0;
+
+      return `
+        <article class="finance-transfer-card">
+          <strong>${escapeHtml(formatMonth(month))}</strong>
+          <p>Recebido no mes: ${escapeHtml(formatCurrency(receivedAmount))}</p>
+          <p>Valor para repasse: ${escapeHtml(formatCurrency(transferAmount))}</p>
+        </article>
+      `;
+    })
+    .join("");
+  elements.financialTransferList.classList.remove("hidden");
+}
+
 function syncFinancialPreview() {
+  syncFinancialMonthPayingCounts();
   renderFinancialMonthSelection();
 
   const preview = buildFinancialCalculationPreview();
@@ -928,15 +1007,48 @@ function syncFinancialPreview() {
   elements.financialMissing.classList.toggle("finance-negative", preview.missingAmount > 0);
   elements.financialMissing.classList.toggle("finance-positive", preview.missingAmount <= 0);
   renderFinancialMonthPayers(preview);
+  renderFinancialTransfer(preview);
 
   if (preview.monthsCount <= 1) {
     elements.financialDistributionHint.innerHTML =
-      `O valor base de <strong>${escapeHtml(formatCurrency(preview.monthlyFee))}</strong> foi aplicado em um unico mes, com ${preview.totalPayingCount} pagante(s).`;
+      `A base de <strong>${escapeHtml(formatCurrency(preview.monthlyFee))}</strong> foi aplicada sobre <strong>${escapeHtml(
+        String(preview.totalCount)
+      )}</strong> aluno(s) neste mes. Quando os pagantes chegam a essa quantidade, o faltante zera.`;
     return;
   }
 
   elements.financialDistributionHint.innerHTML =
-    `Rateio em <strong>${preview.monthsCount} meses</strong>: o esperado continua dividido por mes e o recebido acompanha os pagantes que voce informou em cada mes.`;
+    `Cada um dos <strong>${preview.monthsCount} meses</strong> usa a mesma quantidade total de <strong>${escapeHtml(
+      String(preview.totalCount)
+    )}</strong> aluno(s) como referencia. Quando os pagantes de um mes alcancam essa quantidade, o faltante desse mes zera.`;
+}
+
+function renderFinancialMonthSelection() {
+  const selectedMonths = sortMonthValues(state.financialSelectedMonths);
+  state.financialSelectedMonths = selectedMonths;
+
+  if (!selectedMonths.length) {
+    elements.financialMonthList.innerHTML = "";
+    elements.financialMonthHint.textContent = "Adicione um ou mais meses para o lancamento.";
+    return;
+  }
+
+  elements.financialMonthList.innerHTML = selectedMonths
+    .map(
+      (month) => `
+        <div class="finance-month-chip">
+          <button class="chip-button" type="button" data-financial-month-remove="${escapeHtml(month)}">
+            <strong>${escapeHtml(formatMonth(month))}</strong> x
+          </button>
+        </div>
+      `
+    )
+    .join("");
+
+  elements.financialMonthHint.textContent =
+    selectedMonths.length > 1
+      ? `${selectedMonths.length} meses selecionados com a mesma referencia de quantidade total.`
+      : "1 mes selecionado para este lancamento.";
 }
 
 function renderFinancial(customer) {
@@ -1006,10 +1118,12 @@ function renderFinancial(customer) {
             <div><span>Mensalidade base</span><strong>${escapeHtml(formatCurrency(entry.monthlyFee || 0))}</strong></div>
             <div><span>Pagantes no mes</span><strong>${escapeHtml(String(entry.payingCount ?? 0))}</strong></div>
             <div><span>Quantidade total</span><strong>${escapeHtml(String(entry.totalCount ?? 0))}</strong></div>
-            <div><span>Meses no rateio</span><strong>${escapeHtml(String(entry.monthsCount || 1))}</strong></div>
+            <div><span>Meses vinculados</span><strong>${escapeHtml(String(entry.monthsCount || 1))}</strong></div>
             <div><span>Esperado</span><strong>${escapeHtml(formatCurrency(entry.expectedAmount || 0))}</strong></div>
             <div><span>Recebido</span><strong>${escapeHtml(formatCurrency(entry.receivedAmount || 0))}</strong></div>
             <div><span>Faltante</span><strong>${escapeHtml(formatCurrency(entry.missingAmount || 0))}</strong></div>
+            <div><span>Divisor do repasse</span><strong>${escapeHtml(String(entry.repasseDivisor || "-"))}</strong></div>
+            <div><span>Valor para repasse</span><strong>${escapeHtml(entry.repasseAmount !== null ? formatCurrency(entry.repasseAmount) : "-")}</strong></div>
             <div><span>Atualizado</span><strong>${escapeHtml(formatDate(entry.updatedAt))}</strong></div>
           </div>
           ${entry.notes ? `<p class="helper-copy">${escapeHtml(entry.notes)}</p>` : ""}
@@ -1458,8 +1572,12 @@ function startFinancialEditing(entry) {
   );
   elements.financialMonthlyFee.value = fallbackMonthlyFee > 0 ? fallbackMonthlyFee.toFixed(2) : "";
   elements.financialTotalCount.value = `${fallbackTotalCount}`;
+  elements.financialTransferEnabled.checked = Number.isInteger(entry.repasseDivisor) && entry.repasseDivisor > 0;
+  elements.financialTransferDivisor.value =
+    Number.isInteger(entry.repasseDivisor) && entry.repasseDivisor > 0 ? `${entry.repasseDivisor}` : "";
+  elements.financialTransferDivisor.disabled = !elements.financialTransferEnabled.checked;
   elements.financialNotes.value = entry.notes || "";
-  elements.saveFinancialButton.textContent = relatedEntries.length > 1 ? "Salvar rateio" : "Salvar alteracoes";
+  elements.saveFinancialButton.textContent = relatedEntries.length > 1 ? "Salvar meses" : "Salvar alteracoes";
   elements.clearFinancialFormButton.classList.remove("hidden");
   syncFinancialPreview();
 }
@@ -1479,7 +1597,11 @@ async function handleFinancialFormSubmit(event) {
   if (!reportCustomerName) {
     throw new Error("Digite o nome do cliente que deve aparecer no relatorio.");
   }
+  if (elements.financialTransferEnabled.checked && parseCountValue(elements.financialTransferDivisor.value) <= 0) {
+    throw new Error("Informe um numero maior que zero para o divisor do repasse.");
+  }
 
+  const preview = buildFinancialCalculationPreview();
   const payload = {
     groupId: elements.financialGroupId.value,
     months: state.financialSelectedMonths,
@@ -1487,8 +1609,10 @@ async function handleFinancialFormSubmit(event) {
     monthlyFee: elements.financialMonthlyFee.value,
     payingCountsByMonth: cloneMonthCountMap(state.financialPayingCountsByMonth),
     totalCount: elements.financialTotalCount.value,
-    expectedAmount: buildFinancialCalculationPreview().expectedAmount,
-    receivedAmount: buildFinancialCalculationPreview().receivedAmount,
+    transferEnabled: elements.financialTransferEnabled.checked,
+    transferDivisor: elements.financialTransferDivisor.value,
+    expectedAmount: preview.expectedAmount,
+    receivedAmount: preview.receivedAmount,
     notes: elements.financialNotes.value,
   };
 
@@ -1818,6 +1942,15 @@ elements.financialUseSelectedCustomerButton.addEventListener("click", () => {
     return;
   }
   elements.financialReportCustomerName.value = selectedCustomerName;
+  syncFinancialPreview();
+});
+elements.financialTransferEnabled.addEventListener("change", () => {
+  if (!elements.financialTransferEnabled.checked) {
+    elements.financialTransferDivisor.value = "";
+  }
+  syncFinancialPreview();
+});
+elements.financialTransferDivisor.addEventListener("input", () => {
   syncFinancialPreview();
 });
 elements.adminSettingsForm.addEventListener("submit", (event) => {
