@@ -391,6 +391,49 @@ function parseFinancialAmount(value, label) {
   return Number(amount.toFixed(2));
 }
 
+function parseFinancialCount(value, label) {
+  const rawValue = `${value ?? ""}`.trim();
+  if (!rawValue) {
+    return 0;
+  }
+
+  const count = Number(rawValue);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error(`Informe um numero valido em ${label}.`);
+  }
+  return count;
+}
+
+function roundFinancialAmount(value) {
+  return Number((Number(value || 0)).toFixed(2));
+}
+
+function splitFinancialAmount(totalAmount, partsCount) {
+  const safePartsCount = Math.max(partsCount || 1, 1);
+  const totalCents = Math.round(roundFinancialAmount(totalAmount) * 100);
+  const baseCents = Math.trunc(totalCents / safePartsCount);
+  const remainder = totalCents - baseCents * safePartsCount;
+
+  return Array.from({ length: safePartsCount }, (_unused, index) =>
+    Number(((baseCents + (index < remainder ? 1 : 0)) / 100).toFixed(2))
+  );
+}
+
+function parseFinancialMonths(value, fallbackMonth = "") {
+  const monthCandidates = Array.isArray(value)
+    ? value
+    : [value || fallbackMonth].filter(Boolean);
+  const normalizedMonths = Array.from(new Set(monthCandidates.map((month) => parseFinancialMonth(month)))).sort(
+    (left, right) => left.localeCompare(right)
+  );
+
+  if (!normalizedMonths.length) {
+    throw new Error("Selecione ao menos um mes.");
+  }
+
+  return normalizedMonths;
+}
+
 function calculateMissingAmount(expectedAmount, receivedAmount) {
   return Number((expectedAmount - receivedAmount).toFixed(2));
 }
@@ -428,14 +471,43 @@ function formatIsoDateTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function buildFinancialCalculationSummary(entry) {
+  const summaryParts = [];
+
+  if (typeof entry?.monthlyFee === "number" && Number.isFinite(entry.monthlyFee)) {
+    summaryParts.push(`Mensalidade ${formatCurrencyValue(entry.monthlyFee)}`);
+  }
+  if (Number.isInteger(entry?.payingCount)) {
+    summaryParts.push(`${entry.payingCount} pagante(s)`);
+  }
+  if (Number.isInteger(entry?.totalCount)) {
+    summaryParts.push(`${entry.totalCount} no total`);
+  }
+  if (Number.isInteger(entry?.monthsCount) && entry.monthsCount > 1) {
+    summaryParts.push(`rateado em ${entry.monthsCount} meses`);
+  }
+
+  return summaryParts.join(" | ");
+}
+
 function sanitizeFinancialEntry(entry) {
   const expectedAmount = Number.isFinite(entry?.expectedAmount) ? Number(entry.expectedAmount) : 0;
   const receivedAmount = Number.isFinite(entry?.receivedAmount) ? Number(entry.receivedAmount) : 0;
+  const calculationSummary = buildFinancialCalculationSummary(entry);
 
   return {
     id: entry?.id || "",
+    groupId: `${entry?.groupId || ""}`.trim(),
     month: entry?.month || "",
     monthLabel: formatMonthValue(entry?.month),
+    groupMonths: Array.isArray(entry?.groupMonths) ? entry.groupMonths : [entry?.month || ""].filter(Boolean),
+    monthsCount: Number.isInteger(entry?.monthsCount) && entry.monthsCount > 0 ? entry.monthsCount : 1,
+    monthlyFee: typeof entry?.monthlyFee === "number" && Number.isFinite(entry.monthlyFee)
+      ? Number(entry.monthlyFee.toFixed(2))
+      : null,
+    payingCount: Number.isInteger(entry?.payingCount) ? entry.payingCount : null,
+    totalCount: Number.isInteger(entry?.totalCount) ? entry.totalCount : null,
+    calculationSummary,
     expectedAmount: Number(expectedAmount.toFixed(2)),
     receivedAmount: Number(receivedAmount.toFixed(2)),
     missingAmount: calculateMissingAmount(expectedAmount, receivedAmount),
@@ -481,6 +553,79 @@ function buildFinancialSummary(entries) {
 
 function findFinancialEntry(customer, entryId) {
   return (customer?.financialEntries || []).find((entry) => entry.id === entryId) || null;
+}
+
+function rebuildFinancialGroupMetadata(financialEntries, groupId) {
+  const normalizedGroupId = `${groupId || ""}`.trim();
+  if (!normalizedGroupId) {
+    return;
+  }
+
+  const groupedEntries = (financialEntries || [])
+    .filter((entry) => `${entry.groupId || ""}`.trim() === normalizedGroupId)
+    .sort((left, right) => `${left.month || ""}`.localeCompare(`${right.month || ""}`));
+
+  if (!groupedEntries.length) {
+    return;
+  }
+
+  const groupMonths = groupedEntries.map((entry) => entry.month);
+  const nextGroupId = groupedEntries.length > 1 ? normalizedGroupId : "";
+
+  groupedEntries.forEach((entry) => {
+    entry.groupId = nextGroupId;
+    entry.groupMonths = groupMonths;
+    entry.monthsCount = groupMonths.length;
+  });
+}
+
+function buildFinancialEntriesFromBody(body, options = {}) {
+  const {
+    notes = normalizeText(body.notes),
+    groupId = "",
+    createIdFactory = () => createId("finance"),
+  } = options;
+  const months = parseFinancialMonths(body.months, body.month);
+  const usesBaseModel =
+    Object.prototype.hasOwnProperty.call(body, "monthlyFee") ||
+    Object.prototype.hasOwnProperty.call(body, "payingCount") ||
+    Object.prototype.hasOwnProperty.call(body, "totalCount");
+
+  let monthlyFee = null;
+  let payingCount = null;
+  let totalCount = null;
+  let expectedAmountTotal = 0;
+  let receivedAmountTotal = 0;
+
+  if (usesBaseModel) {
+    monthlyFee = parseFinancialAmount(body.monthlyFee, "Valor da mensalidade");
+    payingCount = parseFinancialCount(body.payingCount, "Quantos pagantes");
+    totalCount = parseFinancialCount(body.totalCount, "Quantidade total");
+    expectedAmountTotal = roundFinancialAmount(monthlyFee * totalCount);
+    receivedAmountTotal = roundFinancialAmount(monthlyFee * payingCount);
+  } else {
+    expectedAmountTotal = parseFinancialAmount(body.expectedAmount, "Valor esperado");
+    receivedAmountTotal = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+  }
+
+  const expectedShares = splitFinancialAmount(expectedAmountTotal, months.length);
+  const receivedShares = splitFinancialAmount(receivedAmountTotal, months.length);
+  const normalizedGroupId = months.length > 1 ? `${groupId || createId("finance-group")}`.trim() : "";
+  const safeNotes = normalizeText(notes);
+
+  return months.map((month, index) => ({
+    id: createIdFactory(index, month),
+    groupId: normalizedGroupId,
+    month,
+    groupMonths: months,
+    monthsCount: months.length,
+    monthlyFee,
+    payingCount,
+    totalCount,
+    expectedAmount: expectedShares[index],
+    receivedAmount: receivedShares[index],
+    notes: safeNotes,
+  }));
 }
 
 function pdfColor(hexValue) {
@@ -734,7 +879,8 @@ async function buildFinancialReportPdf(customer) {
     });
   } else {
     for (const entry of financialEntries) {
-      const notesLines = wrapPdfText(entry.notes || "-", fonts.regular, 8.5, 153);
+      const noteText = [entry.calculationSummary, entry.notes].filter(Boolean).join(" | ") || "-";
+      const notesLines = wrapPdfText(noteText, fonts.regular, 8.5, 153);
       const rowHeight = Math.max(28, notesLines.length * 11 + 12);
       if (cursorY - rowHeight < pageConfig.margin + 24) {
         page = pdfDoc.addPage([pageConfig.width, pageConfig.height]);
@@ -755,7 +901,7 @@ async function buildFinancialReportPdf(customer) {
           font: fonts.bold,
           size: 9,
         },
-        { width: 169, text: entry.notes || "-", color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
+        { width: 169, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
       ];
 
       let currentX = pageConfig.margin;
@@ -1395,56 +1541,52 @@ async function handleCreateFinancialEntry(request, response, customerId) {
   }
 
   const body = await readJsonBody(request);
-  let month;
-  let expectedAmount;
-  let receivedAmount;
+  let entryDrafts;
 
   try {
-    month = parseFinancialMonth(body.month);
-    expectedAmount = parseFinancialAmount(body.expectedAmount, "Valor esperado");
-    receivedAmount = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+    entryDrafts = buildFinancialEntriesFromBody(body);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Nao foi possivel validar o lancamento." });
     return;
   }
 
-  const createdEntry = await mutateStore((mutableStore) => {
+  const createdEntries = await mutateStore((mutableStore) => {
     const mutableCustomer = findCustomerById(mutableStore, customerId);
     if (!mutableCustomer) {
       throw new Error("Cliente nao encontrado.");
     }
 
     const nowIso = new Date().toISOString();
-    const financialEntry = {
+    const nextEntries = entryDrafts.map((entry) => ({
+      ...entry,
       id: createId("finance"),
-      month,
-      expectedAmount,
-      receivedAmount,
-      notes: normalizeText(body.notes),
       createdAt: nowIso,
       updatedAt: nowIso,
-    };
+    }));
 
     mutableCustomer.financialEntries = sortFinancialEntries([
       ...(mutableCustomer.financialEntries || []),
-      financialEntry,
+      ...nextEntries,
     ]);
     mutableCustomer.updatedAt = nowIso;
     appendAudit(
       mutableStore,
       "financial-create",
-      `Lancamento financeiro ${month} salvo para ${mutableCustomer.name}.`,
+      `Lancamento financeiro de ${nextEntries.length} mes(es) salvo para ${mutableCustomer.name}.`,
       {
         customerId,
-        financialEntryId: financialEntry.id,
-        month,
+        financialEntryId: nextEntries[0]?.id || "",
+        months: nextEntries.map((entry) => entry.month),
         by: session.user.email,
       }
     );
-    return financialEntry;
+    return nextEntries;
   });
 
-  sendJson(response, 201, sanitizeFinancialEntry(createdEntry));
+  sendJson(response, 201, {
+    created: createdEntries.map(sanitizeFinancialEntry),
+    createdCount: createdEntries.length,
+  });
 }
 
 async function handleUpdateFinancialEntry(request, response, customerId, entryId) {
@@ -1470,52 +1612,85 @@ async function handleUpdateFinancialEntry(request, response, customerId, entryId
   }
 
   const body = await readJsonBody(request);
-  let month;
-  let expectedAmount;
-  let receivedAmount;
+  let updatedEntries;
 
   try {
-    month = parseFinancialMonth(body.month);
-    expectedAmount = parseFinancialAmount(body.expectedAmount, "Valor esperado");
-    receivedAmount = parseFinancialAmount(body.receivedAmount, "Valor recebido");
+    updatedEntries = await mutateStore((mutableStore) => {
+      const mutableCustomer = findCustomerById(mutableStore, customerId);
+      if (!mutableCustomer) {
+        throw new Error("Cliente nao encontrado.");
+      }
+
+      const targetEntry = findFinancialEntry(mutableCustomer, entryId);
+      if (!targetEntry) {
+        throw new Error("Lancamento financeiro nao encontrado.");
+      }
+
+      const shouldUpdateGroup =
+        Boolean(targetEntry.groupId) &&
+        `${body.groupId || ""}`.trim() &&
+        `${body.groupId || ""}`.trim() === `${targetEntry.groupId || ""}`.trim();
+      const currentGroupId = `${targetEntry.groupId || ""}`.trim();
+      const nowIso = new Date().toISOString();
+      const entryDrafts = buildFinancialEntriesFromBody(body, {
+        groupId: shouldUpdateGroup ? currentGroupId : "",
+      });
+
+      let nextEntries;
+
+      if (shouldUpdateGroup) {
+        const preservedEntries = (mutableCustomer.financialEntries || []).filter(
+          (entry) => `${entry.groupId || ""}`.trim() !== currentGroupId
+        );
+        nextEntries = entryDrafts.map((entry, index) => ({
+          ...entry,
+          id: index === 0 ? targetEntry.id : createId("finance"),
+          createdAt: index === 0 ? targetEntry.createdAt : nowIso,
+          updatedAt: nowIso,
+        }));
+        mutableCustomer.financialEntries = sortFinancialEntries(preservedEntries.concat(nextEntries));
+      } else {
+        const [singleEntry] = entryDrafts;
+        targetEntry.groupId = singleEntry.groupId || "";
+        targetEntry.groupMonths = singleEntry.groupMonths;
+        targetEntry.monthsCount = singleEntry.monthsCount;
+        targetEntry.month = singleEntry.month;
+        targetEntry.monthlyFee = singleEntry.monthlyFee;
+        targetEntry.payingCount = singleEntry.payingCount;
+        targetEntry.totalCount = singleEntry.totalCount;
+        targetEntry.expectedAmount = singleEntry.expectedAmount;
+        targetEntry.receivedAmount = singleEntry.receivedAmount;
+        targetEntry.notes = singleEntry.notes;
+        targetEntry.updatedAt = nowIso;
+        mutableCustomer.financialEntries = sortFinancialEntries(mutableCustomer.financialEntries || []);
+        rebuildFinancialGroupMetadata(mutableCustomer.financialEntries, currentGroupId);
+        nextEntries = [targetEntry];
+      }
+
+      mutableCustomer.financialEntries = sortFinancialEntries(mutableCustomer.financialEntries || []);
+      mutableCustomer.updatedAt = nowIso;
+      appendAudit(
+        mutableStore,
+        "financial-update",
+        `Lancamento financeiro atualizado para ${mutableCustomer.name}.`,
+        {
+          customerId,
+          financialEntryId: targetEntry.id,
+          months: nextEntries.map((entry) => entry.month),
+          by: session.user.email,
+        }
+      );
+      return nextEntries;
+    });
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Nao foi possivel validar o lancamento." });
     return;
   }
 
-  const updatedEntry = await mutateStore((mutableStore) => {
-    const mutableCustomer = findCustomerById(mutableStore, customerId);
-    if (!mutableCustomer) {
-      throw new Error("Cliente nao encontrado.");
-    }
-
-    const targetEntry = findFinancialEntry(mutableCustomer, entryId);
-    if (!targetEntry) {
-      throw new Error("Lancamento financeiro nao encontrado.");
-    }
-
-    targetEntry.month = month;
-    targetEntry.expectedAmount = expectedAmount;
-    targetEntry.receivedAmount = receivedAmount;
-    targetEntry.notes = normalizeText(body.notes);
-    targetEntry.updatedAt = new Date().toISOString();
-    mutableCustomer.financialEntries = sortFinancialEntries(mutableCustomer.financialEntries || []);
-    mutableCustomer.updatedAt = targetEntry.updatedAt;
-    appendAudit(
-      mutableStore,
-      "financial-update",
-      `Lancamento financeiro ${month} atualizado para ${mutableCustomer.name}.`,
-      {
-        customerId,
-        financialEntryId: targetEntry.id,
-        month,
-        by: session.user.email,
-      }
-    );
-    return targetEntry;
+  sendJson(response, 200, {
+    updated: updatedEntries.map(sanitizeFinancialEntry),
+    updatedCount: updatedEntries.length,
   });
-
-  sendJson(response, 200, sanitizeFinancialEntry(updatedEntry));
 }
 
 async function handleDeleteFinancialEntry(request, response, customerId, entryId) {
@@ -1541,6 +1716,7 @@ async function handleDeleteFinancialEntry(request, response, customerId, entryId
     }
 
     const [entry] = mutableCustomer.financialEntries.splice(entryIndex, 1);
+    rebuildFinancialGroupMetadata(mutableCustomer.financialEntries, entry.groupId);
     mutableCustomer.updatedAt = new Date().toISOString();
     appendAudit(
       mutableStore,

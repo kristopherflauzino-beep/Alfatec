@@ -7,6 +7,8 @@ const state = {
   statusFilter: "all",
   portalView: "overview",
   editingFinancialEntryId: "",
+  editingFinancialGroupId: "",
+  financialSelectedMonths: [],
 };
 
 const FALLBACK_WEB_API_BASE_URL = "https://alfatec01.vercel.app";
@@ -88,7 +90,15 @@ const elements = {
   financeContent: document.getElementById("finance-content"),
   financialForm: document.getElementById("financial-form"),
   financialEntryId: document.getElementById("financial-entry-id"),
-  financialMonth: document.getElementById("financial-month"),
+  financialGroupId: document.getElementById("financial-group-id"),
+  financialMonthInput: document.getElementById("financial-month-input"),
+  addFinancialMonthButton: document.getElementById("add-financial-month-button"),
+  financialMonthList: document.getElementById("financial-month-list"),
+  financialMonthHint: document.getElementById("financial-month-hint"),
+  financialDistributionHint: document.getElementById("financial-distribution-hint"),
+  financialMonthlyFee: document.getElementById("financial-monthly-fee"),
+  financialPayingCount: document.getElementById("financial-paying-count"),
+  financialTotalCount: document.getElementById("financial-total-count"),
   financialExpected: document.getElementById("financial-expected"),
   financialReceived: document.getElementById("financial-received"),
   financialMissing: document.getElementById("financial-missing"),
@@ -328,8 +338,44 @@ function parseMoneyValue(value) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function parseCountValue(value) {
+  const normalizedValue = `${value ?? ""}`.trim();
+  if (!normalizedValue) {
+    return 0;
+  }
+  const count = Number(normalizedValue);
+  if (!Number.isInteger(count) || count < 0) {
+    return 0;
+  }
+  return count;
+}
+
 function calculateFinancialMissingAmount(expectedAmount, receivedAmount) {
   return Number((expectedAmount - receivedAmount).toFixed(2));
+}
+
+function roundCurrency(value) {
+  return Number((Number(value || 0)).toFixed(2));
+}
+
+function splitAmountAcrossMonths(amount, monthsCount) {
+  const safeMonthsCount = Math.max(monthsCount || 1, 1);
+  const totalCents = Math.round(roundCurrency(amount) * 100);
+  const baseCents = Math.trunc(totalCents / safeMonthsCount);
+  const remainder = totalCents - baseCents * safeMonthsCount;
+
+  return Array.from({ length: safeMonthsCount }, (_unused, index) =>
+    Number(((baseCents + (index < remainder ? 1 : 0)) / 100).toFixed(2))
+  );
+}
+
+function normalizeMonthValue(value) {
+  const normalizedValue = `${value || ""}`.trim();
+  return /^\d{4}-\d{2}$/.test(normalizedValue) ? normalizedValue : "";
+}
+
+function sortMonthValues(values) {
+  return [...(values || [])].sort((left, right) => `${left}`.localeCompare(`${right}`));
 }
 
 function togglePasswordVisibility(input, button) {
@@ -674,24 +720,131 @@ function renderDevices(customer) {
 
 function resetFinancialForm(options = {}) {
   const { preserveMonth = false } = options;
+  const existingMonth = preserveMonth ? normalizeMonthValue(elements.financialMonthInput.value) : "";
+  const fallbackMonth = existingMonth || nextMonthValue();
   state.editingFinancialEntryId = "";
+  state.editingFinancialGroupId = "";
+  state.financialSelectedMonths = sortMonthValues([fallbackMonth]);
   elements.financialEntryId.value = "";
-  elements.financialMonth.value = preserveMonth && elements.financialMonth.value ? elements.financialMonth.value : nextMonthValue();
+  elements.financialGroupId.value = "";
+  elements.financialMonthInput.value = fallbackMonth;
+  elements.financialMonthlyFee.value = "";
+  elements.financialPayingCount.value = "";
+  elements.financialTotalCount.value = "";
   elements.financialExpected.value = "";
   elements.financialReceived.value = "";
   elements.financialNotes.value = "";
   elements.saveFinancialButton.textContent = "Salvar lancamento";
   elements.clearFinancialFormButton.classList.add("hidden");
-  syncFinancialMissingPreview();
+  syncFinancialPreview();
 }
 
-function syncFinancialMissingPreview() {
-  const expectedAmount = parseMoneyValue(elements.financialExpected.value);
-  const receivedAmount = parseMoneyValue(elements.financialReceived.value);
+function renderFinancialMonthSelection() {
+  const selectedMonths = sortMonthValues(state.financialSelectedMonths);
+  state.financialSelectedMonths = selectedMonths;
+
+  if (!selectedMonths.length) {
+    elements.financialMonthList.innerHTML = "";
+    elements.financialMonthHint.textContent = "Adicione um ou mais meses para o lancamento.";
+    return;
+  }
+
+  elements.financialMonthList.innerHTML = selectedMonths
+    .map(
+      (month) => `
+        <div class="finance-month-chip">
+          <button class="chip-button" type="button" data-financial-month-remove="${escapeHtml(month)}">
+            <strong>${escapeHtml(formatMonth(month))}</strong> ×
+          </button>
+        </div>
+      `
+    )
+    .join("");
+
+  elements.financialMonthHint.textContent =
+    selectedMonths.length > 1
+      ? `${selectedMonths.length} meses selecionados para rateio.`
+      : "1 mes selecionado para este lancamento.";
+}
+
+function setFinancialSelectedMonths(months) {
+  const normalizedMonths = sortMonthValues(
+    Array.from(new Set((months || []).map((month) => normalizeMonthValue(month)).filter(Boolean)))
+  );
+  state.financialSelectedMonths = normalizedMonths.length ? normalizedMonths : [nextMonthValue()];
+  elements.financialMonthInput.value = state.financialSelectedMonths[state.financialSelectedMonths.length - 1];
+  renderFinancialMonthSelection();
+}
+
+function addFinancialMonth(month) {
+  const normalizedMonth = normalizeMonthValue(month);
+  if (!normalizedMonth) {
+    throw new Error("Selecione um mes valido.");
+  }
+
+  setFinancialSelectedMonths(state.financialSelectedMonths.concat(normalizedMonth));
+  syncFinancialPreview();
+}
+
+function removeFinancialMonth(month) {
+  const normalizedMonth = normalizeMonthValue(month);
+  if (!normalizedMonth) {
+    return;
+  }
+
+  const nextMonths = state.financialSelectedMonths.filter((item) => item !== normalizedMonth);
+  setFinancialSelectedMonths(nextMonths);
+  syncFinancialPreview();
+}
+
+function buildFinancialCalculationPreview() {
+  const monthlyFee = roundCurrency(parseMoneyValue(elements.financialMonthlyFee.value));
+  const payingCount = parseCountValue(elements.financialPayingCount.value);
+  const totalCount = parseCountValue(elements.financialTotalCount.value);
+  const monthsCount = Math.max(state.financialSelectedMonths.length || 1, 1);
+  const expectedAmount = roundCurrency(monthlyFee * totalCount);
+  const receivedAmount = roundCurrency(monthlyFee * payingCount);
   const missingAmount = calculateFinancialMissingAmount(expectedAmount, receivedAmount);
-  elements.financialMissing.value = formatCurrency(missingAmount);
-  elements.financialMissing.classList.toggle("finance-negative", missingAmount > 0);
-  elements.financialMissing.classList.toggle("finance-positive", missingAmount <= 0);
+  const expectedShares = splitAmountAcrossMonths(expectedAmount, monthsCount);
+  const receivedShares = splitAmountAcrossMonths(receivedAmount, monthsCount);
+  const missingShares = splitAmountAcrossMonths(missingAmount, monthsCount);
+
+  return {
+    monthlyFee,
+    payingCount,
+    totalCount,
+    monthsCount,
+    expectedAmount,
+    receivedAmount,
+    missingAmount,
+    expectedShares,
+    receivedShares,
+    missingShares,
+  };
+}
+
+function syncFinancialPreview() {
+  renderFinancialMonthSelection();
+
+  const preview = buildFinancialCalculationPreview();
+  elements.financialExpected.value = formatCurrency(preview.expectedAmount);
+  elements.financialReceived.value = formatCurrency(preview.receivedAmount);
+  elements.financialMissing.value = formatCurrency(preview.missingAmount);
+  elements.financialMissing.classList.toggle("finance-negative", preview.missingAmount > 0);
+  elements.financialMissing.classList.toggle("finance-positive", preview.missingAmount <= 0);
+
+  if (preview.monthsCount <= 1) {
+    elements.financialDistributionHint.innerHTML =
+      `O valor base de <strong>${escapeHtml(formatCurrency(preview.monthlyFee))}</strong> sera aplicado somente no mes selecionado.`;
+    return;
+  }
+
+  elements.financialDistributionHint.innerHTML =
+    `Rateio em <strong>${preview.monthsCount} meses</strong>: esperado por mes ${escapeHtml(
+      formatCurrency(preview.expectedShares[0] || 0)
+    )}, recebido por mes ${escapeHtml(formatCurrency(preview.receivedShares[0] || 0))} e faltante por mes ${escapeHtml(
+      formatCurrency(preview.missingShares[0] || 0)
+    )}.`;
 }
 
 function renderFinancial(customer) {
@@ -744,16 +897,21 @@ function renderFinancial(customer) {
           <div class="financial-card-head">
             <div>
               <h3>${escapeHtml(entry.monthLabel || formatMonth(entry.month))}</h3>
-              <p>${escapeHtml(entry.notes || "Sem observacoes para este mes.")}</p>
+              <p>${escapeHtml(entry.calculationSummary || entry.notes || "Sem observacoes para este mes.")}</p>
             </div>
             <span class="${missingClass}">${escapeHtml(missingLabel)}</span>
           </div>
           <div class="user-meta-grid">
+            <div><span>Mensalidade base</span><strong>${escapeHtml(formatCurrency(entry.monthlyFee || 0))}</strong></div>
+            <div><span>Pagantes</span><strong>${escapeHtml(String(entry.payingCount ?? 0))}</strong></div>
+            <div><span>Quantidade total</span><strong>${escapeHtml(String(entry.totalCount ?? 0))}</strong></div>
+            <div><span>Meses no rateio</span><strong>${escapeHtml(String(entry.monthsCount || 1))}</strong></div>
             <div><span>Esperado</span><strong>${escapeHtml(formatCurrency(entry.expectedAmount || 0))}</strong></div>
             <div><span>Recebido</span><strong>${escapeHtml(formatCurrency(entry.receivedAmount || 0))}</strong></div>
             <div><span>Faltante</span><strong>${escapeHtml(formatCurrency(entry.missingAmount || 0))}</strong></div>
             <div><span>Atualizado</span><strong>${escapeHtml(formatDate(entry.updatedAt))}</strong></div>
           </div>
+          ${entry.notes ? `<p class="helper-copy">${escapeHtml(entry.notes)}</p>` : ""}
           <div class="action-cluster">
             <button class="ghost" type="button" data-financial-action="edit" data-financial-id="${escapeHtml(entry.id)}">Editar</button>
             <button class="ghost" type="button" data-financial-action="delete" data-financial-id="${escapeHtml(entry.id)}">Excluir</button>
@@ -1163,15 +1321,42 @@ async function handleCreateCustomer(event) {
 }
 
 function startFinancialEditing(entry) {
+  const customer = getSelectedCustomer();
+  const relatedEntries = entry.groupId
+    ? (customer?.financialEntries || []).filter((item) => item.groupId === entry.groupId)
+    : [entry];
+  const months = relatedEntries.map((item) => item.month).filter(Boolean);
+  const fallbackMonthlyFee =
+    typeof entry.monthlyFee === "number"
+      ? entry.monthlyFee
+      : typeof entry.expectedAmount === "number"
+        ? entry.expectedAmount
+        : 0;
+  const fallbackPayingCount =
+    Number.isInteger(entry.payingCount)
+      ? entry.payingCount
+      : fallbackMonthlyFee > 0 && typeof entry.receivedAmount === "number"
+        ? Math.max(0, Math.round(entry.receivedAmount / fallbackMonthlyFee))
+        : 0;
+  const fallbackTotalCount =
+    Number.isInteger(entry.totalCount)
+      ? entry.totalCount
+      : fallbackMonthlyFee > 0 && typeof entry.expectedAmount === "number"
+        ? Math.max(1, Math.round(entry.expectedAmount / fallbackMonthlyFee))
+        : 1;
+
   state.editingFinancialEntryId = entry.id;
+  state.editingFinancialGroupId = entry.groupId || "";
   elements.financialEntryId.value = entry.id;
-  elements.financialMonth.value = entry.month || nextMonthValue();
-  elements.financialExpected.value = typeof entry.expectedAmount === "number" ? entry.expectedAmount.toFixed(2) : "";
-  elements.financialReceived.value = typeof entry.receivedAmount === "number" ? entry.receivedAmount.toFixed(2) : "";
+  elements.financialGroupId.value = entry.groupId || "";
+  setFinancialSelectedMonths(months.length ? months : [entry.month || nextMonthValue()]);
+  elements.financialMonthlyFee.value = fallbackMonthlyFee > 0 ? fallbackMonthlyFee.toFixed(2) : "";
+  elements.financialPayingCount.value = `${fallbackPayingCount}`;
+  elements.financialTotalCount.value = `${fallbackTotalCount}`;
   elements.financialNotes.value = entry.notes || "";
-  elements.saveFinancialButton.textContent = "Salvar alteracoes";
+  elements.saveFinancialButton.textContent = relatedEntries.length > 1 ? "Salvar rateio" : "Salvar alteracoes";
   elements.clearFinancialFormButton.classList.remove("hidden");
-  syncFinancialMissingPreview();
+  syncFinancialPreview();
 }
 
 async function handleFinancialFormSubmit(event) {
@@ -1181,10 +1366,18 @@ async function handleFinancialFormSubmit(event) {
     throw new Error("Selecione um cliente antes de salvar o financeiro.");
   }
 
+  if (!state.financialSelectedMonths.length) {
+    throw new Error("Selecione ao menos um mes para o lancamento.");
+  }
+
   const payload = {
-    month: elements.financialMonth.value,
-    expectedAmount: elements.financialExpected.value,
-    receivedAmount: elements.financialReceived.value,
+    groupId: elements.financialGroupId.value,
+    months: state.financialSelectedMonths,
+    monthlyFee: elements.financialMonthlyFee.value,
+    payingCount: elements.financialPayingCount.value,
+    totalCount: elements.financialTotalCount.value,
+    expectedAmount: buildFinancialCalculationPreview().expectedAmount,
+    receivedAmount: buildFinancialCalculationPreview().receivedAmount,
     notes: elements.financialNotes.value,
   };
 
@@ -1480,6 +1673,20 @@ elements.downloadFinancialReportButton.addEventListener("click", () => {
 elements.clearFinancialFormButton.addEventListener("click", () => {
   resetFinancialForm({ preserveMonth: true });
 });
+elements.addFinancialMonthButton.addEventListener("click", () => {
+  try {
+    addFinancialMonth(elements.financialMonthInput.value || nextMonthValue());
+  } catch (error) {
+    showToast(error.message || "Nao foi possivel adicionar o mes.");
+  }
+});
+elements.financialMonthList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-financial-month-remove]");
+  if (!button) {
+    return;
+  }
+  removeFinancialMonth(button.dataset.financialMonthRemove || "");
+});
 elements.adminSettingsForm.addEventListener("submit", (event) => {
   handleAdminPasswordChange(event).catch((error) => showToast(error.message || "Nao foi possivel atualizar a senha."));
 });
@@ -1499,11 +1706,12 @@ elements.adminSettingsForm.addEventListener("submit", (event) => {
 });
 
 [
-  elements.financialExpected,
-  elements.financialReceived,
+  elements.financialMonthlyFee,
+  elements.financialPayingCount,
+  elements.financialTotalCount,
 ].forEach((input) => {
   input.addEventListener("input", () => {
-    syncFinancialMissingPreview();
+    syncFinancialPreview();
   });
 });
 

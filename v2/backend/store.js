@@ -6,7 +6,7 @@ const DATA_DIR = process.env.V2_DATA_DIR
   ? path.resolve(process.env.V2_DATA_DIR)
   : path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
-const STORE_VERSION = 6;
+const STORE_VERSION = 7;
 const DEFAULT_OFFLINE_GRACE_HOURS = 24 * 10;
 const ALFATEC_EMAIL_DOMAIN = "alfatec.com";
 const DEFAULT_ADMIN_EMAIL = "admin@alfatec.com";
@@ -280,6 +280,23 @@ function normalizeCustomer(rawCustomer, nowIso) {
   };
 }
 
+function normalizeFinancialMonths(values, fallbackMonth) {
+  const safeFallback = /^\d{4}-\d{2}$/.test(`${fallbackMonth || ""}`.trim()) ? `${fallbackMonth}`.trim() : nowMonth();
+  const normalizedMonths = Array.from(
+    new Set(
+      (Array.isArray(values) ? values : [])
+        .map((value) => `${value || ""}`.trim())
+        .filter((value) => /^\d{4}-\d{2}$/.test(value))
+    )
+  ).sort((left, right) => left.localeCompare(right));
+
+  return normalizedMonths.length ? normalizedMonths : [safeFallback];
+}
+
+function nowMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function normalizeFinancialEntry(rawEntry, nowIso) {
   const month = `${rawEntry?.month || ""}`.trim();
   const expectedAmount = Number.isFinite(rawEntry?.expectedAmount)
@@ -292,10 +309,32 @@ function normalizeFinancialEntry(rawEntry, nowIso) {
     : Number.isFinite(rawEntry?.valueReceived)
       ? Number(rawEntry.valueReceived)
       : 0;
+  const normalizedMonth = /^\d{4}-\d{2}$/.test(month) ? month : nowIso.slice(0, 7);
+  const monthlyFee = Number.isFinite(rawEntry?.monthlyFee) ? Number(rawEntry.monthlyFee) : null;
+  const payingCount = Number.isInteger(rawEntry?.payingCount)
+    ? rawEntry.payingCount
+    : Number.isFinite(rawEntry?.payingCount)
+      ? Math.max(0, Math.round(Number(rawEntry.payingCount)))
+      : null;
+  const totalCount = Number.isInteger(rawEntry?.totalCount)
+    ? rawEntry.totalCount
+    : Number.isFinite(rawEntry?.totalCount)
+      ? Math.max(0, Math.round(Number(rawEntry.totalCount)))
+      : null;
+  const groupMonths = normalizeFinancialMonths(rawEntry?.groupMonths, normalizedMonth);
+  const monthsCount = Number.isInteger(rawEntry?.monthsCount) && rawEntry.monthsCount > 0
+    ? rawEntry.monthsCount
+    : groupMonths.length;
 
   return {
     id: rawEntry?.id || createId("finance"),
-    month: /^\d{4}-\d{2}$/.test(month) ? month : nowIso.slice(0, 7),
+    groupId: `${rawEntry?.groupId || ""}`.trim(),
+    month: normalizedMonth,
+    groupMonths,
+    monthsCount,
+    monthlyFee: monthlyFee === null ? null : Number(monthlyFee.toFixed(2)),
+    payingCount,
+    totalCount,
     expectedAmount: Number(expectedAmount.toFixed(2)),
     receivedAmount: Number(receivedAmount.toFixed(2)),
     notes: `${rawEntry?.notes || ""}`.trim(),
