@@ -786,9 +786,10 @@ function drawPdfRect(page, x, y, width, height, color, borderColor) {
 
 function loadFinancialLogoBuffer() {
   const candidatePaths = [
-    path.join(ADMIN_DIR, "alfatec-logo.png"),
+    path.join(__dirname, "..", "..", "assets", "report-logo-transparent.png"),
     path.join(__dirname, "..", "..", "assets", "report-logo.png"),
     path.join(__dirname, "..", "..", "assets", "alfatec-logo.png"),
+    path.join(ADMIN_DIR, "alfatec-logo.png"),
   ];
 
   for (const candidatePath of candidatePaths) {
@@ -824,6 +825,7 @@ async function buildFinancialReportPdf(customer, options = {}) {
   };
   const financialEntries = sortFinancialEntries(customer.financialEntries || []).map(sanitizeFinancialEntry);
   const summary = buildFinancialSummary(financialEntries);
+  const hasRepasse = financialEntries.some((entry) => Number.isInteger(entry.repasseDivisor) && entry.repasseDivisor > 0);
   const reportCustomerName = resolveFinancialReportCustomerName(customer, options.reportCustomerName);
   const logoBuffer = loadFinancialLogoBuffer();
   const logoImage = logoBuffer ? await pdfDoc.embedPng(logoBuffer) : null;
@@ -868,11 +870,17 @@ async function buildFinancialReportPdf(customer, options = {}) {
     });
 
     if (logoImage && logoRatio) {
-      const logoWidth = isContinuation ? 118 : 148;
-      const logoHeight = logoWidth * logoRatio;
+      const maxLogoWidth = isContinuation ? 118 : 148;
+      const maxLogoHeight = cardHeight - 24;
+      let logoWidth = maxLogoWidth;
+      let logoHeight = logoWidth * logoRatio;
+      if (logoHeight > maxLogoHeight) {
+        logoHeight = maxLogoHeight;
+        logoWidth = logoHeight / logoRatio;
+      }
       currentPage.drawImage(logoImage, {
         x: x + width - 16 - logoWidth,
-        y: y + cardHeight - 16 - logoHeight,
+        y: y + (cardHeight - logoHeight) / 2,
         width: logoWidth,
         height: logoHeight,
       });
@@ -884,16 +892,19 @@ async function buildFinancialReportPdf(customer, options = {}) {
   const drawSummary = (currentPage) => {
     const gap = 10;
     const totalWidth = pageConfig.width - pageConfig.margin * 2;
-    const cardWidth = (totalWidth - gap * 3) / 4;
-    const cardHeight = 70;
-    const startX = pageConfig.margin;
-    const y = cursorY - cardHeight;
     const cards = [
       ["Meses", `${summary.totalEntries}`],
       ["Esperado", formatCurrencyValue(summary.expectedAmount)],
       ["Recebido", formatCurrencyValue(summary.receivedAmount)],
       ["Faltante", formatCurrencyValue(summary.missingAmount)],
     ];
+    if (hasRepasse) {
+      cards.push(["Repasse", formatCurrencyValue(summary.repasseAmount)]);
+    }
+    const cardWidth = (totalWidth - gap * (cards.length - 1)) / cards.length;
+    const cardHeight = 70;
+    const startX = pageConfig.margin;
+    const y = cursorY - cardHeight;
 
     cards.forEach(([label, value], index) => {
       const x = startX + index * (cardWidth + gap);
@@ -908,7 +919,12 @@ async function buildFinancialReportPdf(customer, options = {}) {
         font: fonts.bold,
         size: 14,
         lineHeight: 16,
-        color: label === "Faltante" && summary.missingAmount > 0 ? colors.warning : colors.ink,
+        color:
+          label === "Faltante" && summary.missingAmount > 0
+            ? colors.warning
+            : label === "Repasse"
+              ? colors.brand
+              : colors.ink,
       });
     });
 
@@ -918,14 +934,24 @@ async function buildFinancialReportPdf(customer, options = {}) {
   const drawTableHeader = (currentPage) => {
     const x = pageConfig.margin;
     const y = cursorY - 28;
-    const columns = [
-      { label: "Mes", width: 86 },
-      { label: "Pagantes", width: 62 },
-      { label: "Esperado", width: 78 },
-      { label: "Recebido", width: 78 },
-      { label: "Faltante", width: 78 },
-      { label: "Observacoes", width: 153 },
-    ];
+    const columns = hasRepasse
+      ? [
+        { label: "Mes", width: 76 },
+        { label: "Pagantes", width: 54 },
+        { label: "Esperado", width: 74 },
+        { label: "Recebido", width: 74 },
+        { label: "Faltante", width: 74 },
+        { label: "Repasse", width: 74 },
+        { label: "Observacoes", width: 109 },
+      ]
+      : [
+        { label: "Mes", width: 86 },
+        { label: "Pagantes", width: 62 },
+        { label: "Esperado", width: 78 },
+        { label: "Recebido", width: 78 },
+        { label: "Faltante", width: 78 },
+        { label: "Observacoes", width: 153 },
+      ];
     let cursorX = x;
 
     columns.forEach((column) => {
@@ -971,7 +997,8 @@ async function buildFinancialReportPdf(customer, options = {}) {
   } else {
     for (const entry of financialEntries) {
       const noteText = [entry.reportCustomerName, entry.calculationSummary, entry.notes].filter(Boolean).join(" | ") || "-";
-      const notesLines = wrapPdfText(noteText, fonts.regular, 8.5, 137);
+      const notesWidth = hasRepasse ? 93 : 137;
+      const notesLines = wrapPdfText(noteText, fonts.regular, 8.5, notesWidth);
       const rowHeight = Math.max(28, notesLines.length * 11 + 12);
       if (cursorY - rowHeight < pageConfig.margin + 24) {
         page = pdfDoc.addPage([pageConfig.width, pageConfig.height]);
@@ -981,20 +1008,42 @@ async function buildFinancialReportPdf(customer, options = {}) {
       }
 
       const rowY = cursorY - rowHeight;
-      const columns = [
-        { width: 86, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
-        { width: 62, text: `${entry.payingCount ?? 0}`, color: colors.ink, font: fonts.bold, size: 9 },
-        { width: 78, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
-        { width: 78, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
-        {
-          width: 78,
-          text: formatCurrencyValue(entry.missingAmount),
-          color: entry.missingAmount > 0 ? colors.warning : colors.success,
-          font: fonts.bold,
-          size: 9,
-        },
-        { width: 153, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
-      ];
+      const columns = hasRepasse
+        ? [
+          { width: 76, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
+          { width: 54, text: `${entry.payingCount ?? 0}`, color: colors.ink, font: fonts.bold, size: 9 },
+          { width: 74, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+          { width: 74, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+          {
+            width: 74,
+            text: formatCurrencyValue(entry.missingAmount),
+            color: entry.missingAmount > 0 ? colors.warning : colors.success,
+            font: fonts.bold,
+            size: 9,
+          },
+          {
+            width: 74,
+            text: entry.repasseAmount !== null ? formatCurrencyValue(entry.repasseAmount) : "-",
+            color: colors.brand,
+            font: fonts.bold,
+            size: 9,
+          },
+          { width: 109, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
+        ]
+        : [
+          { width: 86, text: entry.monthLabel, color: colors.ink, font: fonts.bold, size: 9 },
+          { width: 62, text: `${entry.payingCount ?? 0}`, color: colors.ink, font: fonts.bold, size: 9 },
+          { width: 78, text: formatCurrencyValue(entry.expectedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+          { width: 78, text: formatCurrencyValue(entry.receivedAmount), color: colors.ink, font: fonts.regular, size: 9 },
+          {
+            width: 78,
+            text: formatCurrencyValue(entry.missingAmount),
+            color: entry.missingAmount > 0 ? colors.warning : colors.success,
+            font: fonts.bold,
+            size: 9,
+          },
+          { width: 153, text: noteText, color: colors.muted, font: fonts.regular, size: 8.5, lines: notesLines },
+        ];
 
       let currentX = pageConfig.margin;
       columns.forEach((column) => {
